@@ -94,13 +94,17 @@ async def send_html_email(to: str, subject: str, html: str) -> tuple[bool, str]:
         else:
             kwargs["port"] = port
         client = aiosmtplib.SMTP(**kwargs)
+        where = f"{host}:{port}" + (f" ({ip})" if ip else "")
         try:
             await client.connect()
-        except aiosmtplib.SMTPConnectTimeoutError as exc:
+        except aiosmtplib.SMTPConnectTimeoutError:
             raise SMTPStageError(
-                f"Connected to {host}:{port}{f' ({ip})' if ip else ''} but the server never sent its greeting ({exc}). "
+                f"Connected to {where} but the server never sent its greeting within {timeout:.0f}s. "
                 f"A firewall or transparent proxy is filtering SMTP on this network. Try SMTP_PORT=465, or port 2525 with a provider like Brevo."
             )
+        except aiosmtplib.SMTPConnectError as exc:
+            raise SMTPStageError(f"Connection to {where} was dropped before the greeting ({exc.__class__.__name__}). "
+                                 f"Something on the network is interfering with SMTP; try SMTP_PORT=465.")
         try:
             if settings.smtp_username:
                 await client.login(settings.smtp_username, settings.smtp_password)
