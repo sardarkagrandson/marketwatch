@@ -58,22 +58,22 @@ def universe(force: bool = False) -> list[Scheme]:
     if settings.offline_mode:
         schemes = sources.demo_schemes()
     else:
-        cached = None if force else _cache_get("mf:universe:v1", UNIVERSE_TTL)
+        cached = None if force else _cache_get("mf:universe:v2", UNIVERSE_TTL)
         if cached is not None:
             schemes = [Scheme.model_validate(r) for r in cached]
         else:
             try:
                 schemes = sources.fetch_amfi()
-                _cache_set("mf:universe:v1", [s.model_dump(mode="json") for s in schemes])
+                _cache_set("mf:universe:v2", [s.model_dump(mode="json") for s in schemes])
             except Exception as exc:
                 log.warning("AMFI NAV fetch failed: %s", exc)
-                stale = _cache_get("mf:universe:v1", timedelta(days=30))
+                stale = _cache_get("mf:universe:v2", timedelta(days=30))
                 if stale:
                     schemes = [Scheme.model_validate(r) for r in stale]
                 else:
                     try:
                         schemes = sources.fetch_mfapi_list()
-                        _cache_set("mf:universe:v1", [s.model_dump(mode="json") for s in schemes])
+                        _cache_set("mf:universe:v2", [s.model_dump(mode="json") for s in schemes])
                     except Exception as exc2:
                         log.warning("mfapi.in scheme list failed too: %s", exc2)
                         schemes = []
