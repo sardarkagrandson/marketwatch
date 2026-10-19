@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
     smtp_from: str = "alerts@example.com"
+    smtp_prefer_ipv4: bool = True
+    smtp_timeout_seconds: float = 25.0
 
     quote_cache_seconds: int = 60
     history_cache_seconds: int = 900

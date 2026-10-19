@@ -91,3 +91,20 @@ def test_chart_api(client):
 def test_test_email_saved_to_outbox(client):
     r = client.post("/spotlight/test-email", data={"email": "me@example.com"}, follow_redirects=False)
     assert r.status_code == 303 and "Error" in r.headers["location"] and "SMTP" in r.headers["location"]
+
+
+def test_smtp_blocked_port_message(monkeypatch):
+    import asyncio
+    from app.alerts import email as em
+    from app.config import get_settings
+
+    st = get_settings()
+    monkeypatch.setattr(st, "smtp_host", "smtp.example.test")
+    monkeypatch.setattr(st, "smtp_timeout_seconds", 0.2)
+
+    async def no_route(host, port, timeout):
+        raise em.SMTPStageError("TCP connection to smtp.example.test:587 timed out: this network or ISP is blocking port 587. Try SMTP_PORT=465")
+
+    monkeypatch.setattr(em, "_open_ipv4_socket", no_route)
+    ok, detail = asyncio.run(em.send_html_email("a@b.co", "s", "<p>x</p>"))
+    assert not ok and "blocking port 587" in detail and "465" in detail
