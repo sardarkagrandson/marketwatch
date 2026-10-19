@@ -194,3 +194,15 @@ def test_parse_real_nse_current_issue_row():
     assert (l.price_low, l.price_high) == (665.0, 700.0) and l.status == "open"
     assert l.issue_shares == 8526033 and l.issue_size_cr == round(8526033 * 700 / 1e7, 2)
     assert round(l.subscription_times, 2) == 96.39
+
+
+def test_assessment_recomputes_when_inputs_change(db):
+    from app.ipo import service
+    from app.ipo.schemas import IPOListing
+    base = IPOListing(key="RECALC", company="Recalc Co", price_low=100, price_high=110, gmp=5)
+    a1, _ = service._assessment_for(base, [], 0.0)
+    a2, _ = service._assessment_for(base.model_copy(update={"gmp": 60, "subscription_times": 40.0}), [], 0.0)
+    assert a1.strengths != a2.strengths or a1.sentiment != a2.sentiment
+    service.clear_ipo_cache()
+    from app.models import IPOCache
+    assert db.query(IPOCache).filter(IPOCache.key.like("ipo:%")).count() == 0

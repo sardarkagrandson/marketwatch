@@ -21,7 +21,10 @@ log = logging.getLogger(__name__)
 
 LIST_TTL = timedelta(hours=1)
 GMP_TTL = timedelta(minutes=15)
-UPCOMING_KEY = "ipo:upcoming:v2"      # bumped: v1 rows carried parsed GMP values
+PARSER_VERSION = 3                    # bump whenever parsing changes so stale cached rows are ignored
+UPCOMING_KEY = f"ipo:upcoming:v{PARSER_VERSION}"
+GMP_KEY = f"ipo:gmp:v{PARSER_VERSION}"
+PAST_KEY = f"ipo:past:v{PARSER_VERSION}"
 ASSESS_TTL = timedelta(hours=12)
 NEWS_DAYS = 14
 RECENT_DAYS = 60
@@ -81,10 +84,10 @@ def upcoming_listings(force: bool = False) -> list[IPOListing]:
             if rows:
                 _cache_set(UPCOMING_KEY, [r.model_dump(mode="json") for r in rows])
         # GMP is matched at read time from its own short-lived cache so parser fixes apply immediately.
-        gmp = None if force else _cache_get("ipo:gmp:v2", GMP_TTL)
+        gmp = None if force else _cache_get(GMP_KEY, GMP_TTL)
         if gmp is None:
             gmp = _with_timeout(sources.fetch_gmp_table, GMP_TIMEOUT, {}, "GMP page")
-            _cache_set("ipo:gmp:v2", gmp)
+            _cache_set(GMP_KEY, gmp)
         for r in rows:
             hit = sources.match_gmp(r, gmp)
             if hit is not None:
@@ -144,7 +147,16 @@ def _ipo_news(listing: IPOListing) -> tuple[list[dict], float | None]:
 
 
 def _assessment_for(listing: IPOListing, headlines: list[str], news_score: float | None) -> tuple[IPOAssessment, str]:
-    key = f"ipo:assess:{listing.key}"
+    import hashlib
+
+    # The cache key includes everything the read depends on, so a changed GMP, subscription,
+    # fundamentals or headline set produces a fresh assessment instead of a stale one.
+    basis = json.dumps({
+        "gmp": listing.gmp, "sub": listing.subscription_times, "band": [listing.price_low, listing.price_high],
+        "size": listing.issue_size_cr, "fresh": listing.fresh_issue_cr, "ofs": listing.ofs_cr, "status": listing.status,
+        "fund": listing.fundamentals.model_dump(), "news": headlines[:5], "score": news_score, "v": PARSER_VERSION,
+    }, sort_keys=True, default=str)
+    key = f"ipo:assess:{listing.key}:{hashlib.sha1(basis.encode()).hexdigest()[:12]}"
     cached = _cache_get(key, ASSESS_TTL)
     if cached and (cached.get("method") == "llm" or not get_settings().llm_enabled):
         return IPOAssessment.model_validate(cached["assessment"]), cached["method"]
@@ -234,13 +246,13 @@ def recently_listed(force: bool = False) -> list[ListedIPO]:
     if settings.offline_mode:
         rows = sources.demo_past()
     else:
-        cached = None if force else _cache_get("ipo:past", LIST_TTL)
+        cached = None if force else _cache_get(PAST_KEY, LIST_TTL)
         if cached is not None:
             rows = [ListedIPO.model_validate(r) for r in cached]
         else:
             rows = _with_timeout(lambda: sources.fetch_nse_past(RECENT_DAYS), NSE_TIMEOUT, [], "NSE past issues")
             if rows:
-                _cache_set("ipo:past", [r.model_dump(mode="json") for r in rows])
+                _cache_set(PAST_KEY, [r.model_dump(mode="json") for r in rows])
     overrides = sources.load_overrides()
     for r in rows:
         o = overrides.get(r.key)
@@ -276,8 +288,16 @@ _snap_lock = threading.Lock()
 SNAPSHOT_TTL = 3600.0
 
 
+def clear_ipo_cache() -> None:
+    """Drop every cached IPO row (lists, GMP, news, assessments)."""
+    with session_scope() as s:
+        s.query(IPOCache).filter(IPOCache.key.like("ipo:%")).delete(synchronize_session=False)
+
+
 def _refresh_snapshot(force: bool) -> None:
     t0 = time.monotonic()
+    if force:
+        clear_ipo_cache()
     try:
         cards = upcoming_cards(force)
         listed = recently_listed(force)
