@@ -155,3 +155,42 @@ def test_gmp_multiple_urls(monkeypatch):
     table = sources.fetch_gmp_table("https://first.example/gmp, https://second.example/gmp")
     assert table == {"alpha metals": 12.0} and len(calls) == 2
     assert len(sources.gmp_diagnostics()["attempts"]) == 2
+
+
+REAL_GMP_HTML = """<table><thead><tr><th>Name &#9650; &#9660;</th><th>GMP &#9650; &#9660;</th><th>&#128293;Rating</th><th>Sub</th><th>Price (&#8377;)</th><th>IPO Size</th><th>Lot</th><th>Open</th></tr></thead>
+<tbody>
+<tr><td><a>BLS Polymers IPO</a> <span>U</span></td><td>&#8377; 20 (13.33%) 20 &#8595; / 20 &#8593;</td><td>&#128293;</td><td>-</td><td>150</td><td>&#8377;255.00 Cr</td><td>100</td><td>27-Oct</td></tr>
+<tr><td>Core4 Engineers BSE SME U</td><td>&#8377; -- (0.00%) 0 &#8595; / 0 &#8593;</td><td>&#128293;</td><td>-</td><td>93</td><td>&#8377;54.82 Cr</td><td>1,200</td><td>23-Oct</td></tr>
+<tr><td>Jio Platforms IPO U</td><td>&#8377; 252 (22.52%) 148 &#8595; / 252 &#8593;</td><td>x</td><td>-</td><td>1,119</td><td>&#8377;30213.00 Cr</td><td>12</td><td>21-Oct</td></tr>
+<tr><td>Tonbo Imaging India IPO CT</td><td>&#8377; 515 (73.57%) 270 &#8595; / 516 &#8593;</td><td>x</td><td>37.55x</td><td>700</td><td>&#8377;852.18 Cr</td><td>21</td><td>15-Oct GMP: 500</td></tr>
+</tbody></table>"""
+
+
+def test_gmp_parse_real_page_layout(monkeypatch):
+    class R:
+        text = REAL_GMP_HTML
+        content = REAL_GMP_HTML.encode()
+        status_code = 200
+        url = "https://example.com/gmp"
+        def raise_for_status(self): pass
+
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    table = sources.fetch_gmp_table("https://example.com/gmp")
+    assert table == {"bls polymers": 20.0, "jio platforms": 252.0, "tonbo imaging india": 515.0}
+    tonbo = IPOListing(key="TONBO", symbol="TONBO", company="Tonbo Imaging India Limited", price_low=665, price_high=700)
+    jio = IPOListing(key="JPL", symbol="JPL", company="Jio Platforms Limited", price_low=1065, price_high=1119)
+    other = IPOListing(key="X", symbol="X", company="Tonbo Imaging India Limited", price_low=100, price_high=120)
+    assert sources.match_gmp(tonbo, table) == 515.0
+    assert sources.match_gmp(jio, table) == 252.0
+    assert sources.match_gmp(other, table) is None          # price on the page disagrees with the band
+
+
+def test_parse_real_nse_current_issue_row():
+    row = {"companyName": "Tonbo Imaging India Limited", "issueEndDate": "19-Oct-2026", "issuePrice": "Rs.665 to Rs.700",
+           "issueSize": "8526033", "issueStartDate": "15-Oct-2026", "series": "EQ", "status": "Active", "symbol": "TONBO",
+           "category": "Total", "noOfSharesOffered": "8526033.0", "noOfTime": "96.38560230766173", "noOfsharesBid": "8.21786826E8", "srNo": None}
+    l = sources.parse_nse_issue(row, date(2026, 10, 17))
+    assert (l.price_low, l.price_high) == (665.0, 700.0) and l.status == "open"
+    assert l.issue_shares == 8526033 and l.issue_size_cr == round(8526033 * 700 / 1e7, 2)
+    assert round(l.subscription_times, 2) == 96.39

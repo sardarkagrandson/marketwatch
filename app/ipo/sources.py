@@ -1,6 +1,7 @@
 """IPO data sources: NSE public JSON, optional GMP page, operator overrides, offline demo."""
 from __future__ import annotations
 
+import html as html_lib
 import json
 import logging
 import re
@@ -107,7 +108,7 @@ def parse_nse_issue(row: dict, today: date | None = None) -> IPOListing | None:
         lot_size=int(_num(_get(row, "lotSize", "marketLot", "minBidQty")) or 0) or None,
         issue_size_cr=size_cr,
         issue_shares=shares if shares and shares > 100_000 else None,
-        subscription_times=_num(_get(row, "noOfTimes", "subscriptionTimes", "timesSubscribed")),
+        subscription_times=_num(_get(row, "noOfTime", "noOfTimes", "subscriptionTimes", "timesSubscribed")),
         status=_status(open_d, close_d, today) if _get(row, "status", default="").lower() != "active" else "open",
     )
 
@@ -241,9 +242,10 @@ def _fetch_gmp_table_one(url: str) -> dict[str, float]:
     # Walk table rows. A header row containing "GMP" is required so we never read the wrong column.
     rupee = re.compile(r"(?:₹|Rs\.?|INR)?\s*(-?\d+(?:\.\d+)?)")
     gmp_col: int | None = None
+    price_col: int | None = None
     name_col = 0
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.S | re.I):
-        cells = [re.sub(r"<[^>]+>", " ", c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, flags=re.S | re.I)]
+        cells = [html_lib.unescape(re.sub(r"<[^>]+>", " ", c)) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, flags=re.S | re.I)]
         cells = [re.sub(r"\s+", " ", c).strip() for c in cells]
         if len(cells) < 2:
             continue
@@ -255,6 +257,7 @@ def _fetch_gmp_table_one(url: str) -> dict[str, float]:
                 _gmp_diag["header_rows"].append(cells[:10])
             gmp_col = next(i for i, c in enumerate(lowered) if c.startswith("gmp") or "gmp(" in c)
             name_col = next((i for i, c in enumerate(lowered) if "ipo" in c or "company" in c or "name" in c), 0)
+            price_col = next((i for i, c in enumerate(lowered) if c.startswith("price")), None)
             continue
         if gmp_col is None or gmp_col >= len(cells) or name_col >= len(cells):
             continue
@@ -268,16 +271,27 @@ def _fetch_gmp_table_one(url: str) -> dict[str, float]:
             continue
         if abs(gmp) > 5000:  # no real GMP is this large; the column is something else
             continue
-        out[_norm_company(name)] = gmp
+        key = _norm_company(name)
+        out[key] = gmp
+        if price_col is not None and price_col < len(cells):
+            pm = re.search(r"(\d[\d,]*(?:\.\d+)?)", cells[price_col])
+            if pm:
+                _gmp_price_hint[key] = float(pm.group(1).replace(",", ""))
     _gmp_diag["parsed"] = len(out)
     diag.update(status=_gmp_diag.get("status"), bytes=_gmp_diag.get("bytes"), tables=_gmp_diag.get("tables"),
                 header_rows=_gmp_diag.get("header_rows"), sample_rows=_gmp_diag.get("sample_rows"), parsed=len(out), error=_gmp_diag.get("error"))
     return out
 
 
+_gmp_price_hint: dict[str, float] = {}   # normalised name -> issue price shown on the GMP page
+_NOISE = {"ipo", "ltd", "limited", "sme", "nse", "bse", "pvt", "private", "u", "ct", "cl", "l",
+          "upcoming", "current", "closed", "listed", "and", "&"}
+
+
 def _norm_company(s: str) -> str:
-    s = re.sub(r"\b(ipo|ltd|limited|sme|nse|bse|pvt|private)\b", " ", s.lower())
-    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+    """Lower-case, drop corporate suffixes and the status tags GMP pages append (e.g. 'IPO U', 'BSE SME')."""
+    words = re.sub(r"[^a-z0-9&]+", " ", s.lower()).split()
+    return " ".join(w for w in words if w not in _NOISE)
 
 
 def match_gmp(listing: IPOListing, table: dict[str, float]) -> float | None:
@@ -297,8 +311,15 @@ def match_gmp(listing: IPOListing, table: dict[str, float]) -> float | None:
         if gmp is None:
             hit = difflib.get_close_matches(target, list(table), n=1, cutoff=0.86)
             gmp = table[hit[0]] if hit else None
+    if gmp is None:
+        return None
+    # Cross-check: if the GMP page shows an issue price, it must agree with NSE's band top.
+    matched_key = next((k for k, v in table.items() if v == gmp and (k == target or k.startswith(target + " ") or target.startswith(k + " "))), None)
+    hint = _gmp_price_hint.get(matched_key) if matched_key else None
+    if hint and listing.price_high and abs(hint - listing.price_high) / listing.price_high > 0.03:
+        return None
     # Sanity: a premium beyond +300% or a discount beyond -60% of the band is a parsing error.
-    if gmp is not None and listing.price_high:
+    if listing.price_high:
         pct = gmp / listing.price_high * 100
         if pct > 300 or pct < -60:
             return None
