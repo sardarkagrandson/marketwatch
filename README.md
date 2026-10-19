@@ -18,10 +18,10 @@ with a toggleable dark mode.
 | Market data engine | Official NSE quote (via `nsemine`) during market hours with `yfinance` as fallback and for history; LTP, previous close, day range, 52-week range, volume. Session-aware status (pre-open, open, post-close, closed), NSE holiday list fetched daily, next-open countdown. In-memory TTL cache. |
 | Device licensing | Optional. Ed25519-signed licence keys bound to a per-installation Device ID, verified offline. Unlicensed devices only see the activation screen. |
 | Technicals | 14-day RSI (Wilder), 20/50/200 EMA, 20-day ATR (Wilder), annualised volatility, plus labelled setups / breakdowns. Computed natively with pandas. |
-| News & sentiment matrix | Google News RSS + Yahoo Finance RSS for the past 7 days, deduplicated, cached in SQLite. Each article is classified (category, sentiment, impact -1..+1, reasoning) by Claude via structured output (Pydantic), with a keyword heuristic fallback when no API key is set. Aggregated into a recency-weighted score and momentum bias. |
+| News & sentiment matrix | Google News RSS + Yahoo Finance RSS for the past 7 days, deduplicated, cached in SQLite. Each article is classified (category, sentiment, impact -1..+1, reasoning) by an AI model (Anthropic API) via structured output (Pydantic), with a keyword heuristic fallback when no API key is set. Aggregated into a recency-weighted score and momentum bias. |
 | Cutoff probability | `P(touch) = 2 * [1 - Phi(|ln(P_target/P_0)| / (sigma * sqrt(T)))]` using 1-year realised volatility, with the assumptions stated on screen. |
 | Spotlight watchlist | APScheduler (SQLite job store) polls each ticker on its own interval during market hours. HTML email alerts (aiosmtplib) when a cutoff is hit or a news item scores beyond +/-0.7, with news context and a technical summary. |
-| IPO intelligence | Upcoming & ongoing issues from NSE (price band, lot, size, fresh vs OFS, subscription) with grey-market premium, DRHP metrics, a structured strengths / risks / sentiment read (Claude, with a rules fallback) and a 14-day news feed; recently listed IPOs with listing-day and till-date returns. |
+| IPO intelligence | Upcoming & ongoing issues from NSE (price band, lot, size, fresh vs OFS, subscription) with grey-market premium, DRHP metrics, a structured strengths / risks / sentiment read (AI model, with a rules fallback) and a 14-day news feed; recently listed IPOs with listing-day and till-date returns. |
 | Portfolio health | Holdings with buy price / quantity / date. Net P&L, day change, value-weighted sentiment exposure, and flags for negative catalysts, RSI extremes and 200 EMA breaks. |
 
 ## Quick start
@@ -217,4 +217,4 @@ keys are required.
   web fonts come from Google Fonts, with system fallbacks.
 - "Keyword news scoring" in the status bar means no `ANTHROPIC_API_KEY` is set, so
   headlines are scored with the built-in financial keyword dictionary. Add a key to
-  switch to Claude's structured classification; the badge changes to "AI news scoring".
+  switch to the AI model's structured classification; the badge changes to "AI news scoring".

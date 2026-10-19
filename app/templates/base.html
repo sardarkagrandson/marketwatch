@@ -62,7 +62,7 @@
       <span>{{ market.ist_time }}</span>
       {% if not market.open and market.next_open %}<span>Next open: {{ market.next_open }} ({{ market.next_open_in }})</span>{% endif %}
       {% if offline %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20">Offline demo data</span>{% endif %}
-      {% if llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20" title="News is classified by Claude using structured output">AI news scoring</span>{% else %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card" title="No ANTHROPIC_API_KEY set: headlines are scored with a built-in financial keyword dictionary. Add a key in .env to enable AI classification.">Keyword news scoring</span>{% endif %}
+      {% if llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20" title="News is classified by the configured AI model using structured output">AI news scoring</span>{% else %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card" title="No ANTHROPIC_API_KEY set: headlines are scored with a built-in financial keyword dictionary. Add a key in .env to enable AI classification.">Keyword news scoring</span>{% endif %}
     </div>
     {% if msg %}
     <div class="rounded-2xl px-4 py-3 text-sm {% if msg.startswith('Error') %}bg-crimson-50 text-crimson-600 dark:bg-crimson/15{% else %}bg-mint-50 text-mint-600 dark:bg-mint/15{% endif %}">{{ msg }}</div>
