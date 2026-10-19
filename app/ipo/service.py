@@ -20,6 +20,8 @@ from app.news.sentiment import assess_articles, summarize
 log = logging.getLogger(__name__)
 
 LIST_TTL = timedelta(hours=1)
+GMP_TTL = timedelta(minutes=15)
+UPCOMING_KEY = "ipo:upcoming:v2"      # bumped: v1 rows carried parsed GMP values
 ASSESS_TTL = timedelta(hours=12)
 NEWS_DAYS = 14
 RECENT_DAYS = 60
@@ -71,18 +73,22 @@ def upcoming_listings(force: bool = False) -> list[IPOListing]:
     if settings.offline_mode:
         rows = sources.demo_upcoming()
     else:
-        cached = None if force else _cache_get("ipo:upcoming", LIST_TTL)
+        cached = None if force else _cache_get(UPCOMING_KEY, LIST_TTL)
         if cached is not None:
             rows = [IPOListing.model_validate(r) for r in cached]
         else:
             rows = _with_timeout(sources.fetch_nse_upcoming, NSE_TIMEOUT * 2, [], "NSE upcoming issues")
             if rows:
-                gmp = _with_timeout(sources.fetch_gmp_table, GMP_TIMEOUT, {}, "GMP page")
-                for r in rows:
-                    hit = sources.match_gmp(r, gmp)
-                    if hit is not None:
-                        r.gmp, r.gmp_source = hit, "grey-market page"
-                _cache_set("ipo:upcoming", [r.model_dump(mode="json") for r in rows])
+                _cache_set(UPCOMING_KEY, [r.model_dump(mode="json") for r in rows])
+        # GMP is matched at read time from its own short-lived cache so parser fixes apply immediately.
+        gmp = None if force else _cache_get("ipo:gmp:v2", GMP_TTL)
+        if gmp is None:
+            gmp = _with_timeout(sources.fetch_gmp_table, GMP_TIMEOUT, {}, "GMP page")
+            _cache_set("ipo:gmp:v2", gmp)
+        for r in rows:
+            hit = sources.match_gmp(r, gmp)
+            if hit is not None:
+                r.gmp, r.gmp_source = hit, "grey-market page"
     overrides = sources.load_overrides()
     rows = [sources.apply_overrides(r, overrides) for r in rows]
     today = date.today()

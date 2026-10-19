@@ -79,10 +79,14 @@ class Quote:
 class YFinanceProvider:
     name = "yfinance"
 
-    def history(self, symbol: str, period: str = "1y") -> pd.DataFrame:
+    def history(self, symbol: str, period: str = "1y", interval: str = "1d",
+                start: datetime | None = None, end: datetime | None = None) -> pd.DataFrame:
         import yfinance as yf
 
-        df = yf.Ticker(symbol).history(period=period, interval="1d", auto_adjust=False)
+        if start is not None:
+            df = yf.Ticker(symbol).history(start=start, end=end, interval=interval, auto_adjust=False)
+        else:
+            df = yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=False)
         if df is None or df.empty:
             raise LookupError(f"No price history returned for {symbol}")
         df = df.rename(columns=str.title)
@@ -168,8 +172,14 @@ class OfflineProvider:
     def _seed(self, symbol: str) -> int:
         return int(hashlib.sha1(symbol.encode()).hexdigest()[:8], 16)
 
-    def history(self, symbol: str, period: str = "1y") -> pd.DataFrame:
-        days = {"1mo": 22, "3mo": 66, "6mo": 126, "1y": 252, "2y": 504}.get(period, 252)
+    def history(self, symbol: str, period: str = "1y", interval: str = "1d",
+                start: datetime | None = None, end: datetime | None = None) -> pd.DataFrame:
+        if interval != "1d":
+            return self._intraday(symbol, period, interval)
+        if start is not None:
+            days = max(2, int(np.busday_count(start.date(), (end or now_ist()).date())) + 1)
+        else:
+            days = {"5d": 5, "1mo": 22, "3mo": 66, "6mo": 126, "1y": 252, "2y": 504, "5y": 1260, "max": 2520}.get(period, 252)
         rng = np.random.default_rng(self._seed(symbol))
         base = 100 + (self._seed(symbol) % 3000)
         drift, vol = 0.08 / 252, (0.18 + (self._seed(symbol) % 20) / 100) / np.sqrt(252)
@@ -179,10 +189,23 @@ class OfflineProvider:
         high = np.maximum(open_, close) * (1 + np.abs(rng.normal(0, vol / 2, days)))
         low = np.minimum(open_, close) * (1 - np.abs(rng.normal(0, vol / 2, days)))
         volume = rng.integers(500_000, 5_000_000, days).astype(float)
-        idx = pd.bdate_range(end=now_ist().date(), periods=days)
+        idx = pd.bdate_range(end=(end or now_ist()).date(), periods=days)
         return pd.DataFrame(
             {"Open": open_, "High": high, "Low": low, "Close": close, "Volume": volume}, index=idx
         )
+
+    def _intraday(self, symbol: str, period: str, interval: str) -> pd.DataFrame:
+        step = {"5m": 5, "15m": 15, "30m": 30, "60m": 60, "1h": 60}.get(interval, 5)
+        sessions = {"1d": 1, "5d": 5, "1mo": 22}.get(period, 1)
+        daily = self.history(symbol, "1mo")
+        rng = np.random.default_rng(self._seed(symbol) + step)
+        frames = []
+        for day_ts, row in daily.tail(sessions).iterrows():
+            n = int(375 / step)
+            path = np.linspace(row["Open"], row["Close"], n) + rng.normal(0, row["Close"] * 0.0015, n).cumsum() * 0.3
+            times = pd.date_range(datetime.combine(day_ts.date(), datetime.min.time()).replace(hour=9, minute=15, tzinfo=IST), periods=n, freq=f"{step}min")
+            frames.append(pd.DataFrame({"Open": path, "High": path * 1.001, "Low": path * 0.999, "Close": path, "Volume": 10_000.0}, index=times))
+        return pd.concat(frames)
 
     def quote(self, symbol: str, history: pd.DataFrame) -> Quote:
         from app.market.tickers import resolve_ticker
@@ -261,12 +284,14 @@ class MarketDataEngine:
                 self._provider = NSELiveProvider()
         return self._provider
 
-    def history(self, symbol: str, period: str = "1y") -> pd.DataFrame:
-        key = f"hist:{self.provider.name}:{symbol}:{period}"
-        cached = _cache.get(key, get_settings().history_cache_seconds)
+    def history(self, symbol: str, period: str = "1y", interval: str = "1d",
+                start: datetime | None = None, end: datetime | None = None) -> pd.DataFrame:
+        key = f"hist:{self.provider.name}:{symbol}:{period}:{interval}:{start.date() if start else ''}:{end.date() if end else ''}"
+        ttl = get_settings().quote_cache_seconds if interval != "1d" else get_settings().history_cache_seconds
+        cached = _cache.get(key, ttl)
         if cached is not None:
             return cached
-        df = self.provider.history(symbol, period)
+        df = self.provider.history(symbol, period, interval, start, end)
         _cache.set(key, df)
         return df
 
@@ -349,3 +374,50 @@ def market_overview(timeout: float = 8.0) -> dict:
     indices = [f.result() for f in idx_f if f.done() and f.result() is not None]
     popular = [f.result() for f in pop_f if f.done() and f.result() is not None]
     return {"indices": indices, "popular": popular}
+
+
+# ---------------------------------------------------------------- chart series
+CHART_RANGES = {
+    # range: (period, interval)
+    "1d": ("1d", "5m"),
+    "1w": ("5d", "30m"),
+    "1m": ("1mo", "1d"),
+    "6m": ("6mo", "1d"),
+    "1y": ("1y", "1d"),
+    "all": ("max", "1d"),
+}
+MAX_POINTS = 600
+
+
+def chart_series(symbol: str, rng: str = "1y", start: datetime | None = None, end: datetime | None = None) -> dict:
+    """Closing-price series for the chart. rng is one of CHART_RANGES or 'custom' with start/end."""
+    engine = get_engine()
+    if rng == "custom" and start is not None:
+        end = end or now_ist()
+        span_days = (end - start).days
+        interval = "30m" if span_days <= 7 else "1d"
+        df = engine.history(symbol, "custom", interval, start, end)
+        label = f"{start:%d %b %Y} to {end:%d %b %Y}"
+    else:
+        period, interval = CHART_RANGES.get(rng, CHART_RANGES["1y"])
+        df = engine.history(symbol, period, interval)
+        label = rng
+    df = df.dropna(subset=["Close"])
+    if len(df) > MAX_POINTS:  # thin evenly so the browser draws at most MAX_POINTS
+        step = int(np.ceil(len(df) / MAX_POINTS))
+        df = pd.concat([df.iloc[::step], df.iloc[[-1]]]).loc[~pd.concat([df.iloc[::step], df.iloc[[-1]]]).index.duplicated()]
+    points = []
+    for ts, row in df.iterrows():
+        t = ts if isinstance(ts, pd.Timestamp) else pd.Timestamp(ts)
+        t = t.tz_localize(IST) if t.tzinfo is None else t.tz_convert(IST)
+        points.append([int(t.timestamp() * 1000), round(float(row["Close"]), 2)])
+    first, last = (points[0][1], points[-1][1]) if points else (None, None)
+    return {
+        "symbol": symbol, "range": rng, "interval": interval, "label": label, "points": points,
+        "first": first, "last": last,
+        "change": round(last - first, 2) if points else None,
+        "change_pct": round((last / first - 1) * 100, 2) if points and first else None,
+        "high": max(p[1] for p in points) if points else None,
+        "low": min(p[1] for p in points) if points else None,
+        "intraday": interval != "1d",
+    }

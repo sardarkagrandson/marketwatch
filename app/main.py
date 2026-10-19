@@ -19,7 +19,7 @@ from app.ipo import service as ipo_service
 from app.alerts import scheduler as sched
 from app.config import get_settings
 from app.db import get_db, init_db, session_scope
-from app.market.data import market_overview, market_status
+from app.market.data import chart_series, market_overview, market_status
 from app.market.tickers import known_symbols, resolve_ticker, suggest
 from app.models import AlertLog, Holding, SpotlightEntry
 from app.portfolio.health import portfolio_health
@@ -216,7 +216,7 @@ def stock_page(request: Request, query: str, target: float | None = None, horizo
     return templates.TemplateResponse(
         request, "stock.html",
         ctx(request, a=analysis, matrix=analysis.matrix, prob=prob, prob_error=prob_error,
-            target=target, horizon=horizon or 20),
+            target=target, horizon=horizon or 20, today=date.today()),
     )
 
 
@@ -332,7 +332,15 @@ def api_ipo_diagnostics():
         gmp = ipo_sources.fetch_gmp_table()
     except Exception as exc:
         gmp = {"error": str(exc)}
-    return {"nse_raw": ipo_sources.last_raw_rows(), "gmp_table": gmp, "gmp_url": get_settings().ipo_gmp_url}
+    nse_raw = ipo_sources.last_raw_rows()
+    if not nse_raw:  # nothing fetched in this process yet: fetch a sample now so field names are visible
+        try:
+            ipo_sources.fetch_nse_upcoming()
+            nse_raw = ipo_sources.last_raw_rows()
+        except Exception as exc:
+            nse_raw = {"error": str(exc)}
+    return {"nse_raw": nse_raw, "gmp_table": gmp, "gmp_diagnostics": ipo_sources.gmp_diagnostics(),
+            "snapshot": ipo_service.snapshot_status()}
 
 
 @app.get("/api/ipo/upcoming")
@@ -359,6 +367,28 @@ def api_health():
             "quote_source": "offline" if s.offline_mode else s.quote_source,
             "license_required": licensing.licensing_required(),
             "market": market_status(), "scheduler_running": sched.get_scheduler().running}
+
+
+@app.get("/api/chart/{symbol}")
+def api_chart(symbol: str, range: str = "1y", start: date | None = None, end: date | None = None):
+    from datetime import datetime as _dt, time as _time
+    from app.market.calendar import IST as _IST
+
+    if range == "custom":
+        if start is None:
+            raise HTTPException(400, "start date is required for a custom range")
+        s_dt = _dt.combine(start, _time.min, tzinfo=_IST)
+        e_dt = _dt.combine(end or date.today(), _time.max, tzinfo=_IST)
+        if e_dt <= s_dt:
+            raise HTTPException(400, "end must be after start")
+    else:
+        s_dt = e_dt = None
+        if range not in ("1d", "1w", "1m", "6m", "1y", "all"):
+            raise HTTPException(400, "unknown range")
+    try:
+        return chart_series(resolve_ticker(symbol).symbol, range, s_dt, e_dt)
+    except Exception as exc:
+        raise HTTPException(502, f"Chart data unavailable: {exc}")
 
 
 @app.get("/api/suggest")

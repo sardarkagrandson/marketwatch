@@ -186,6 +186,25 @@ def fetch_nse_past(days: int = 60) -> list[ListedIPO]:
 
 
 # ---------------------------------------------------------------- GMP (unofficial)
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/130.0.0.0 Safari/537.36")
+_gmp_diag: dict = {}
+
+
+def gmp_diagnostics() -> dict:
+    return dict(_gmp_diag)
+
+
+def fetch_gmp_html(url: str) -> str:
+    import httpx
+
+    resp = httpx.get(url, timeout=20, follow_redirects=True,
+                     headers={"User-Agent": BROWSER_UA, "Accept": "text/html,application/xhtml+xml", "Accept-Language": "en-IN,en;q=0.9"})
+    _gmp_diag.update(status=resp.status_code, bytes=len(resp.content), final_url=str(resp.url))
+    resp.raise_for_status()
+    return resp.text
+
+
 def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
     """Best-effort parse of a public grey-market-premium table into {normalised company: gmp}.
 
@@ -193,19 +212,21 @@ def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
     The page layout is outside our control, so this returns {} on any failure.
     """
     url = url or get_settings().ipo_gmp_url
+    _gmp_diag.clear()
+    _gmp_diag.update(url=url, fetched_at=datetime.now().isoformat(timespec="seconds"))
     if not url:
         return {}
-    import httpx
 
     out: dict[str, float] = {}
     try:
-        resp = httpx.get(url, timeout=20, follow_redirects=True,
-                         headers={"User-Agent": "Mozilla/5.0 (compatible; SnitchofDalalBot/0.1)"})
-        resp.raise_for_status()
-        html = resp.text
+        html = fetch_gmp_html(url)
     except Exception as exc:
         log.warning("GMP fetch failed: %s", exc)
+        _gmp_diag["error"] = str(exc)[:200]
         return {}
+    _gmp_diag["tables"] = len(re.findall(r"<table", html, flags=re.I))
+    _gmp_diag["header_rows"] = []
+    _gmp_diag["sample_rows"] = []
     # Walk table rows. A header row containing "GMP" is required so we never read the wrong column.
     rupee = re.compile(r"(?:₹|Rs\.?|INR)?\s*(-?\d+(?:\.\d+)?)")
     gmp_col: int | None = None
@@ -216,7 +237,11 @@ def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
         if len(cells) < 2:
             continue
         lowered = [c.lower() for c in cells]
+        if len(_gmp_diag["sample_rows"]) < 6:
+            _gmp_diag["sample_rows"].append(cells[:8])
         if any(c.startswith("gmp") or c == "gmp (₹)" or "gmp(" in c for c in lowered):
+            if len(_gmp_diag["header_rows"]) < 3:
+                _gmp_diag["header_rows"].append(cells[:10])
             gmp_col = next(i for i, c in enumerate(lowered) if c.startswith("gmp") or "gmp(" in c)
             name_col = next((i for i, c in enumerate(lowered) if "ipo" in c or "company" in c or "name" in c), 0)
             continue
@@ -233,6 +258,7 @@ def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
         if abs(gmp) > 5000:  # no real GMP is this large; the column is something else
             continue
         out[_norm_company(name)] = gmp
+    _gmp_diag["parsed"] = len(out)
     return out
 
 

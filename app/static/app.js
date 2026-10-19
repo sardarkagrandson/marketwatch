@@ -147,3 +147,136 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
     }).catch(function () { setTimeout(poll, 5000); });
   })();
 })();
+
+// ---- Price chart (stock page) ----------------------------------------------
+(function () {
+  var card = document.getElementById("chart-card");
+  if (!card) return;
+  var symbol = card.getAttribute("data-symbol");
+  var svg = document.getElementById("price-chart");
+  var tip = document.getElementById("chart-tip");
+  var empty = document.getElementById("chart-empty");
+  var meta = document.getElementById("chart-meta");
+  var changeEl = document.getElementById("chart-change");
+  var rangeLabel = document.getElementById("chart-range-label");
+  var customForm = document.getElementById("chart-custom");
+  var btns = card.querySelectorAll(".range-btn");
+  var NS = "http://www.w3.org/2000/svg";
+  var state = { points: [], intraday: false, xs: [], ys: [], w: 0, h: 0 };
+  var ctrl = null;
+
+  function el(name, attrs) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function fmtPrice(v) { return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtTime(ms, intraday, long) {
+    var d = new Date(ms);
+    var opts = intraday ? { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }
+                        : { day: "2-digit", month: "short", year: long ? "numeric" : undefined };
+    return d.toLocaleString("en-IN", Object.assign({ timeZone: "Asia/Kolkata" }, opts));
+  }
+
+  function draw(data) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var pts = data.points || [];
+    state.points = pts; state.intraday = data.intraday;
+    empty.classList.toggle("hidden", pts.length > 1);
+    empty.classList.toggle("flex", pts.length <= 1);
+    if (pts.length <= 1) { changeEl.textContent = "—"; return; }
+
+    var rect = svg.getBoundingClientRect();
+    var w = state.w = Math.max(rect.width, 320), h = state.h = Math.max(rect.height, 200);
+    var padL = 56, padR = 12, padT = 10, padB = 24;
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var xmin = xs[0], xmax = xs[xs.length - 1], ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
+    if (ymax === ymin) { ymax += 1; ymin -= 1; }
+    var pad = (ymax - ymin) * 0.08; ymin -= pad; ymax += pad;
+    var X = function (t) { return padL + (t - xmin) / (xmax - xmin || 1) * (w - padL - padR); };
+    var Y = function (v) { return padT + (1 - (v - ymin) / (ymax - ymin)) * (h - padT - padB); };
+    state.xs = xs.map(X); state.ys = ys.map(Y);
+
+    // Gridlines + y labels (4 steps)
+    for (var i = 0; i <= 4; i++) {
+      var v = ymin + (ymax - ymin) * i / 4, y = Y(v);
+      svg.appendChild(el("line", { x1: padL, x2: w - padR, y1: y, y2: y, class: "chart-grid" }));
+      var t = el("text", { x: padL - 6, y: y + 3, "text-anchor": "end", class: "chart-axis" });
+      t.textContent = v >= 1000 ? Math.round(v).toLocaleString("en-IN") : v.toFixed(v >= 100 ? 1 : 2);
+      svg.appendChild(t);
+    }
+    // x labels (5)
+    for (var j = 0; j <= 4; j++) {
+      var idx = Math.round((pts.length - 1) * j / 4);
+      var tx = el("text", { x: X(xs[idx]), y: h - 6, "text-anchor": j === 0 ? "start" : j === 4 ? "end" : "middle", class: "chart-axis" });
+      tx.textContent = fmtTime(xs[idx], data.intraday, false);
+      svg.appendChild(tx);
+    }
+    var up = ys[ys.length - 1] >= ys[0];
+    var color = up ? "#00D09C" : "#EB5B5B";
+    var d = pts.map(function (p, k) { return (k ? "L" : "M") + state.xs[k].toFixed(1) + " " + state.ys[k].toFixed(1); }).join(" ");
+    var gid = "chart-fill-" + (up ? "up" : "down");
+    var defs = el("defs", {});
+    var grad = el("linearGradient", { id: gid, x1: 0, x2: 0, y1: 0, y2: 1 });
+    var s1 = el("stop", { offset: "0%", "stop-color": color, "stop-opacity": 0.18 });
+    var s2 = el("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 });
+    grad.appendChild(s1); grad.appendChild(s2); defs.appendChild(grad); svg.appendChild(defs);
+    svg.appendChild(el("path", { d: d + " L" + state.xs[state.xs.length - 1].toFixed(1) + " " + (h - padB) + " L" + state.xs[0].toFixed(1) + " " + (h - padB) + " Z", fill: "url(#" + gid + ")" }));
+    svg.appendChild(el("path", { d: d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    // Hover elements
+    var cross = el("line", { y1: padT, y2: h - padB, class: "chart-grid", "stroke-dasharray": "3 3", visibility: "hidden", id: "chart-cross" });
+    var dot = el("circle", { r: 4, fill: color, stroke: "#fff", "stroke-width": 2, visibility: "hidden", id: "chart-dot" });
+    svg.appendChild(cross); svg.appendChild(dot);
+
+    var ch = data.change, pct = data.change_pct;
+    changeEl.textContent = (ch >= 0 ? "+" : "") + ch.toFixed(2) + " (" + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%)";
+    changeEl.className = "num text-lg font-semibold " + (ch >= 0 ? "text-mint-600" : "text-crimson-600");
+    rangeLabel.textContent = fmtTime(xs[0], data.intraday, true) + " → " + fmtTime(xs[xs.length - 1], data.intraday, true);
+    meta.textContent = "High " + fmtPrice(data.high) + " · Low " + fmtPrice(data.low) + " · " + pts.length + " points";
+  }
+
+  function onMove(ev) {
+    if (!state.points.length) return;
+    var rect = svg.getBoundingClientRect();
+    var px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+    var sx = px * state.w / rect.width;
+    var best = 0, bd = Infinity;
+    for (var i = 0; i < state.xs.length; i++) { var dd = Math.abs(state.xs[i] - sx); if (dd < bd) { bd = dd; best = i; } }
+    var cross = document.getElementById("chart-cross"), dot = document.getElementById("chart-dot");
+    cross.setAttribute("x1", state.xs[best]); cross.setAttribute("x2", state.xs[best]); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", state.xs[best]); dot.setAttribute("cy", state.ys[best]); dot.setAttribute("visibility", "visible");
+    var p = state.points[best];
+    tip.textContent = fmtTime(p[0], state.intraday, true) + "  " + fmtPrice(p[1]);
+    tip.hidden = false;
+    var left = state.xs[best] * rect.width / state.w;
+    tip.style.left = Math.min(Math.max(left, 70), rect.width - 70) + "px";
+    tip.style.top = Math.max(state.ys[best] * rect.height / state.h - 34, 0) + "px";
+  }
+  function onLeave() {
+    tip.hidden = true;
+    var c = document.getElementById("chart-cross"), d = document.getElementById("chart-dot");
+    if (c) c.setAttribute("visibility", "hidden"); if (d) d.setAttribute("visibility", "hidden");
+  }
+  svg.addEventListener("mousemove", onMove); svg.addEventListener("touchmove", onMove, { passive: true });
+  svg.addEventListener("mouseleave", onLeave); svg.addEventListener("touchend", onLeave);
+
+  function load(range, start, end) {
+    btns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-range") === range); });
+    customForm.classList.toggle("hidden", range !== "custom");
+    customForm.classList.toggle("flex", range === "custom");
+    if (range === "custom" && !start) return;
+    meta.textContent = "Loading…";
+    if (ctrl) ctrl.abort(); ctrl = new AbortController();
+    var url = "/api/chart/" + encodeURIComponent(symbol) + "?range=" + range + (start ? "&start=" + start + (end ? "&end=" + end : "") : "");
+    fetch(url, { signal: ctrl.signal }).then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw new Error(e.detail || "error"); }); })
+      .then(draw)
+      .catch(function (e) { if (e.name !== "AbortError") { meta.textContent = "Could not load chart: " + e.message; empty.classList.remove("hidden"); empty.classList.add("flex"); } });
+    try { localStorage.setItem("sod-chart-range", range); } catch (e) {}
+  }
+  btns.forEach(function (b) { b.addEventListener("click", function () { load(b.getAttribute("data-range")); }); });
+  customForm.addEventListener("submit", function (ev) { ev.preventDefault(); load("custom", customForm.start.value, customForm.end.value); });
+  var saved = null; try { saved = localStorage.getItem("sod-chart-range"); } catch (e) {}
+  load(saved && saved !== "custom" ? saved : "1y");
+  var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { if (state.points.length) draw({ points: state.points, intraday: state.intraday, change: parseFloat(changeEl.textContent) || 0, change_pct: 0, high: Math.max.apply(null, state.points.map(function (p) { return p[1]; })), low: Math.min.apply(null, state.points.map(function (p) { return p[1]; })) }); }, 150); });
+})();

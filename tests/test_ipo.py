@@ -38,6 +38,9 @@ def test_gmp_table_parse_and_match(monkeypatch):
 
     class R:
         text = html
+        content = html.encode()
+        status_code = 200
+        url = "https://example.com/gmp"
         def raise_for_status(self): pass
 
     import httpx

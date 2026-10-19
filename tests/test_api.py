@@ -71,3 +71,18 @@ def test_stock_page_rounds_indicators(client):
     import re
     rsi = re.search(r'RSI \(14\)</span><span class="num[^"]*">([0-9.]+)', html)
     assert rsi and len(rsi.group(1).split(".")[-1]) <= 1
+
+
+def test_chart_api(client):
+    for rng, intraday in (("1d", True), ("1w", True), ("1m", False), ("6m", False), ("1y", False), ("all", False)):
+        d = client.get(f"/api/chart/TCS?range={rng}").json()
+        assert d["symbol"] == "TCS.NS" and d["intraday"] is intraday and len(d["points"]) > 1, rng
+        assert all(len(p) == 2 for p in d["points"]) and d["points"][0][0] < d["points"][-1][0]
+        assert d["high"] >= d["low"] and d["change_pct"] is not None
+    assert len(client.get("/api/chart/TCS?range=all").json()["points"]) <= 600
+    d = client.get("/api/chart/Infosys?range=custom&start=2026-09-01&end=2026-09-30").json()
+    assert d["range"] == "custom" and d["interval"] == "1d" and "Sep 2026" in d["label"]
+    assert client.get("/api/chart/TCS?range=custom").status_code == 400
+    assert client.get("/api/chart/TCS?range=2w").status_code == 400
+    assert client.get("/api/chart/TCS?range=custom&start=2026-09-10&end=2026-09-01").status_code == 400
+    assert 'id="price-chart"' in client.get("/stock/TCS").text
