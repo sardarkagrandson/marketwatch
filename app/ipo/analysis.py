@@ -72,10 +72,28 @@ def llm_assess(listing: IPOListing, headlines: list[str]) -> IPOAssessment:
 
 # ---------------------------------------------------------------- rules fallback
 def heuristic_assess(listing: IPOListing, headlines: list[str], news_score: float | None = None) -> IPOAssessment:
+    from datetime import date as _date
+
     f = listing.fundamentals
     strengths: list[str] = []
     risks: list[str] = []
     score = 0.0
+
+    # Issue-structure facts available even without a DRHP summary
+    if listing.series == "SME":
+        risks.append("SME platform listing: thinner liquidity, larger lot sizes and wider price swings than mainboard issues."); score -= 0.5
+    if listing.issue_size_cr:
+        if listing.issue_size_cr >= 1000:
+            strengths.append(f"Large Rs {listing.issue_size_cr:,.0f} cr issue usually draws institutional and anchor participation.")
+        elif listing.issue_size_cr < 100:
+            risks.append(f"Small Rs {listing.issue_size_cr:,.0f} cr issue: post-listing float will be thin.")
+    if listing.price_low and listing.price_high and listing.price_high > listing.price_low:
+        band = (listing.price_high / listing.price_low - 1) * 100
+        if band >= 6:
+            risks.append(f"Wide price band ({band:.0f}%) leaves pricing uncertain until allotment.")
+    if listing.close_date and listing.status == "open":
+        left = (listing.close_date - _date.today()).days
+        strengths.append(f"Bidding is open now and closes {'today' if left <= 0 else f'in {left} day(s)'}; subscription figures will firm up the demand picture.")
 
     if f.revenue_growth_pct is not None:
         if f.revenue_growth_pct >= 20:
@@ -122,14 +140,21 @@ def heuristic_assess(listing: IPOListing, headlines: list[str], news_score: floa
         elif news_score < -0.2:
             risks.append(f"Recent news flow is net negative ({news_score:+.2f})."); score -= 0.5
 
+    # Specific headlines, when we have them
+    if headlines:
+        strengths.append(f"Recent coverage: \"{headlines[0][:110]}\"")
+        if len(headlines) > 1:
+            risks.append(f"Also in the news: \"{headlines[1][:110]}\" - read before bidding.")
+    if not f.has_data():
+        risks.append("No DRHP summary (growth, margins, debt, valuation) is available yet, so this read is structural only.")
     if not strengths:
-        strengths.append("No DRHP summary provided; add fundamentals in ipo_overrides.json for a fuller view.")
+        strengths.append("No positive signals detected from the available issue data.")
     if not risks:
-        risks.append("Limited public information; new listings carry higher volatility than seasoned stocks.")
+        risks.append("New listings carry higher volatility than seasoned stocks; size positions accordingly.")
     sentiment = "Bullish" if score >= 2 else "Caution" if score <= -1 else "Neutral"
     return IPOAssessment(
         strengths=strengths[:3], risks=risks[:3], sentiment=sentiment,
-        rationale=f"Rules-based read of the available metrics (score {score:+.1f}); set ANTHROPIC_API_KEY for an AI assessment.",
+        rationale=f"Rules-based read of the issue data and recent headlines (score {score:+.1f}). AI assessment is not enabled on this installation.",
     )
 
 

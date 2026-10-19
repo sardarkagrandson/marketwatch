@@ -32,6 +32,7 @@ class IPOListing(BaseModel):
     price_high: float | None = None
     lot_size: int | None = None
     issue_size_cr: float | None = None
+    issue_shares: float | None = None
     fresh_issue_cr: float | None = None
     ofs_cr: float | None = None
     subscription_times: float | None = None

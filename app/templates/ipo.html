@@ -58,7 +58,7 @@
     <dl class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
       <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Price band</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.price_low %}&#8377;{{ "%g" | format(l.price_low) }}{% if l.price_high != l.price_low %} - {{ "%g" | format(l.price_high) }}{% endif %}{% else %}-{% endif %}</dd></div>
       <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Lot size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ l.lot_size or "-" }}{% if l.lot_size and l.price_high %} <span class="text-xs font-normal text-ink-500">(&#8377;{{ "{:,.0f}".format(l.lot_size * l.price_high) }})</span>{% endif %}</dd></div>
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Issue size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.issue_size_cr %}&#8377;{{ "{:,.0f}".format(l.issue_size_cr) }} cr{% else %}-{% endif %}</dd></div>
+      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Issue size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.issue_size_cr %}&#8377;{{ "{:,.0f}".format(l.issue_size_cr) }} cr{% else %}-{% endif %}{% if l.issue_shares %} <span class="text-xs font-normal text-ink-500">({{ "{:,.0f}".format(l.issue_shares) }} sh)</span>{% endif %}</dd></div>
       <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Fresh / OFS</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.fresh_issue_cr is not none or l.ofs_cr is not none %}{{ "{:,.0f}".format(l.fresh_issue_cr or 0) }} / {{ "{:,.0f}".format(l.ofs_cr or 0) }}{% else %}-{% endif %}</dd></div>
       <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Subscribed</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ "%.2fx" | format(l.subscription_times) if l.subscription_times else "-" }}</dd></div>
     </dl>
@@ -86,7 +86,7 @@
         <ul class="mt-2 space-y-1.5 text-sm">{% for x in c.assessment.risks %}<li class="flex gap-2"><span class="text-crimson">&#9679;</span><span>{{ x }}</span></li>{% endfor %}</ul>
       </details>
     </div>
-    <p class="mt-2 text-xs text-ink-500">{{ c.assessment.rationale }} <span class="opacity-70">({{ "AI assessment" if c.assessment_method == "llm" else "rules-based" }})</span></p>
+    <p class="mt-2 text-xs text-ink-500">{{ c.assessment.rationale }} {% if c.assessment_method == "llm" %}<span class="opacity-70">(AI assessment)</span>{% endif %}</p>
     {% endif %}
 
     {% if c.news %}

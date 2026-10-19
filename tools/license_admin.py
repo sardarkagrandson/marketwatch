@@ -3,6 +3,7 @@
 
   python tools/license_admin.py keygen                      # once; prints LICENSE_PUBLIC_KEY
   python tools/license_admin.py issue --device-id AB12-... --name "Ravi K" --days 365
+  python tools/license_admin.py issue --device-id AB12-...,CD34-... --name "Ravi K"   # one key, two devices
   python tools/license_admin.py inspect <token>
   python tools/license_admin.py list                        # issued_licenses.csv next to the key
 
@@ -47,15 +48,16 @@ def cmd_keygen(args):
 
 def cmd_issue(args):
     pem = Path(args.key).read_text()
-    token = issue_token(pem, args.device_id, args.name, None if args.days == 0 else args.days, args.plan)
+    ids = [d.strip() for chunk in args.device_id for d in chunk.split(",") if d.strip()]
+    token = issue_token(pem, ids, args.name, None if args.days == 0 else args.days, args.plan)
     ledger = ledger_for(args.key)
     new = not ledger.exists()
     with ledger.open("a", newline="") as fh:
         w = csv.writer(fh)
         if new:
             w.writerow(["issued_at", "device_id", "name", "days", "plan", "token"])
-        w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), args.device_id.upper(), args.name, args.days, args.plan, token])
-    print(f"Licence for {args.name} on device {args.device_id.upper()} ({'no expiry' if args.days == 0 else f'{args.days} days'}):\n")
+        w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), " ".join(d.upper() for d in ids), args.name, args.days, args.plan, token])
+    print(f"Licence for {args.name} on device(s) {', '.join(d.upper() for d in ids)} ({'no expiry' if args.days == 0 else f'{args.days} days'}):\n")
     print(token)
     print(f"\nRecorded in {ledger}")
 
@@ -91,7 +93,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     k = sub.add_parser("keygen"); k.add_argument("--out", default=str(DEFAULT_KEY)); k.add_argument("--force", action="store_true")
     i = sub.add_parser("issue")
-    i.add_argument("--device-id", required=True); i.add_argument("--name", required=True)
+    i.add_argument("--device-id", required=True, action="append", help="repeat, or comma-separate, for a key valid on several devices")
+    i.add_argument("--name", required=True)
     i.add_argument("--days", type=int, default=365, help="0 = never expires"); i.add_argument("--plan", default="standard")
     i.add_argument("--key", default=str(DEFAULT_KEY))
     n = sub.add_parser("inspect"); n.add_argument("token"); n.add_argument("--key", default=str(DEFAULT_KEY))

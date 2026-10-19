@@ -1,17 +1,17 @@
 /* Design tokens (Groww-inspired) - complements Tailwind utilities. */
 :root {
   --mint: #00D09C; --crimson: #EB5B5B; --indigo: #5367FF;
-  --bg: #FFFFFF; --bg-2: #F8F9FA; --line: #EAECF0;
+  --bg: #FFFFFF; --card: #FFFFFF; --bg-2: #F8F9FA; --line: #EAECF0;
   --ink-900: #1E222D; --ink-700: #44475B; --ink-500: #7C7E8C;
 }
 html.dark {
-  --bg: #1E222D; --bg-2: #121212; --line: #2B303D;
+  --bg: #1E222D; --card: #1E222D; --bg-2: #121212; --line: #2B303D;
   --ink-900: #FFFFFF; --ink-700: #D5D7E0; --ink-500: #9A9CAB;
 }
 body { line-height: 1.6; }
 .num { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
 .card {
-  background: var(--bg); border: 1px solid var(--line); border-radius: 1rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 1rem;
   box-shadow: 0 1px 2px rgba(30,34,45,0.04), 0 4px 16px rgba(30,34,45,0.06);
   display: block;
 }

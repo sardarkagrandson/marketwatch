@@ -95,11 +95,16 @@ def get_or_create_device_id() -> str:
 # ---------------------------------------------------------------- tokens
 @dataclass
 class LicenseInfo:
-    device_id: str
+    device_id: str                 # first/primary device
     name: str
     issued: str
     expires: str | None
     plan: str = "standard"
+    device_ids: list[str] | None = None   # every device the key is valid on
+
+    @property
+    def devices(self) -> list[str]:
+        return self.device_ids or [self.device_id]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -109,12 +114,18 @@ class LicenseInfo:
         return bool(self.expires) and date.fromisoformat(self.expires) < date.today()
 
 
-def issue_token(private_pem: str, device_id: str, name: str, days: int | None = 365, plan: str = "standard") -> str:
+def issue_token(private_pem: str, device_id: str | list[str], name: str, days: int | None = 365, plan: str = "standard") -> str:
+    """Issue a key for one device ID or a list of them (a 'password' valid on several devices)."""
     key = load_private_key(private_pem)
     today = date.today()
+    ids = [device_id] if isinstance(device_id, str) else list(device_id)
+    ids = [d.strip().upper() for d in ids if d and d.strip()]
+    if not ids:
+        raise LicenseError("At least one device ID is required")
     payload = {
         "v": 1,
-        "device_id": device_id.strip().upper(),
+        "device_id": ids[0],
+        "device_ids": ids,
         "name": name.strip(),
         "issued": today.isoformat(),
         "expires": (today + timedelta(days=days)).isoformat() if days else None,
@@ -146,15 +157,17 @@ def verify_token(token: str, public_key_b64: str, device_id: str | None = None, 
         raise LicenseError("Licence signature is invalid (not issued for this build)")
     if payload.get("v") != 1:
         raise LicenseError("Unsupported licence version")
+    ids = payload.get("device_ids") or [payload.get("device_id", "")]
     info = LicenseInfo(
         device_id=str(payload.get("device_id", "")).upper(),
         name=str(payload.get("name", "")),
         issued=str(payload.get("issued", "")),
         expires=payload.get("expires"),
         plan=str(payload.get("plan", "standard")),
+        device_ids=[str(d).upper() for d in ids],
     )
-    if device_id and info.device_id != device_id.strip().upper():
-        raise LicenseError(f"Licence was issued for device {info.device_id}, but this device is {device_id}")
+    if device_id and device_id.strip().upper() not in info.devices:
+        raise LicenseError(f"This key is valid for device(s) {', '.join(info.devices)}, but this device is {device_id}")
     if info.expires:
         if date.fromisoformat(info.expires) < (today or date.today()):
             raise LicenseError(f"Licence expired on {info.expires}")

@@ -88,10 +88,11 @@ def parse_nse_issue(row: dict, today: date | None = None) -> IPOListing | None:
     open_d = _date(_get(row, "issueStartDate", "openDate", "issueOpenDate"))
     close_d = _date(_get(row, "issueEndDate", "closeDate", "issueCloseDate"))
     lo, hi = _band(_get(row, "issuePrice", "priceBand", "price"))
-    size = _num(_get(row, "issueSize", "issueSizeCr", "size"))
-    # NSE reports issue size either in crore or in rupees; normalise anything implausibly big.
-    if size and size > 1e6:
-        size = round(size / 1e7, 2)
+    # NSE's issueSize is a share count (e.g. "1,09,38,000"); convert to crore at the top of the band.
+    shares = _num(_get(row, "issueSize", "noOfSharesOffered", "size"))
+    size_cr = _num(_get(row, "issueSizeCr", "issueSizeInCr"))
+    if size_cr is None and shares is not None:
+        size_cr = round(shares * hi / 1e7, 2) if (hi and shares > 100_000) else (round(shares, 2) if shares <= 100_000 else None)
     series = str(_get(row, "series", default="EQ")).upper()
     series = "SME" if "SME" in series else "EQ"
     return IPOListing(
@@ -104,7 +105,8 @@ def parse_nse_issue(row: dict, today: date | None = None) -> IPOListing | None:
         price_low=lo,
         price_high=hi,
         lot_size=int(_num(_get(row, "lotSize", "marketLot", "minBidQty")) or 0) or None,
-        issue_size_cr=size,
+        issue_size_cr=size_cr,
+        issue_shares=shares if shares and shares > 100_000 else None,
         subscription_times=_num(_get(row, "noOfTimes", "subscriptionTimes", "timesSubscribed")),
         status=_status(open_d, close_d, today) if _get(row, "status", default="").lower() != "active" else "open",
     )
@@ -128,6 +130,14 @@ def parse_nse_past(row: dict) -> ListedIPO | None:
 
 
 # ---------------------------------------------------------------- NSE fetch
+_last_raw: dict[str, list] = {}
+
+
+def last_raw_rows() -> dict[str, list]:
+    """First few raw rows per NSE endpoint from the latest fetch (for /api/ipo/raw diagnostics)."""
+    return {k: v[:5] for k, v in _last_raw.items()}
+
+
 def _nse_json(url: str):
     from nsemine.bin import scraper
 
@@ -135,6 +145,10 @@ def _nse_json(url: str):
     if resp is None:
         raise RuntimeError(f"NSE returned no response for {url}")
     data = resp.json()
+    rows = data
+    if isinstance(data, dict):
+        rows = next((data[k] for k in ("data", "upcomingIssues", "currentIssues", "pastIssues") if isinstance(data.get(k), list)), [])
+    _last_raw[url] = rows if isinstance(rows, list) else []
     if isinstance(data, dict):
         for k in ("data", "upcomingIssues", "currentIssues", "pastIssues"):
             if isinstance(data.get(k), list):
@@ -192,28 +206,33 @@ def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
     except Exception as exc:
         log.warning("GMP fetch failed: %s", exc)
         return {}
-    # Walk table rows. Use the header row to locate the GMP column when there is one;
-    # otherwise fall back to the second rupee figure in the row (first is usually the price).
-    rupee = re.compile(r"(?:₹|Rs\.?)\s*(-?\d+(?:\.\d+)?)")
+    # Walk table rows. A header row containing "GMP" is required so we never read the wrong column.
+    rupee = re.compile(r"(?:₹|Rs\.?|INR)?\s*(-?\d+(?:\.\d+)?)")
     gmp_col: int | None = None
+    name_col = 0
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.S | re.I):
         cells = [re.sub(r"<[^>]+>", " ", c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, flags=re.S | re.I)]
         cells = [re.sub(r"\s+", " ", c).strip() for c in cells]
         if len(cells) < 2:
             continue
-        if gmp_col is None and any("gmp" in c.lower() for c in cells):
-            gmp_col = next(i for i, c in enumerate(cells) if "gmp" in c.lower())
+        lowered = [c.lower() for c in cells]
+        if any(c.startswith("gmp") or c == "gmp (₹)" or "gmp(" in c for c in lowered):
+            gmp_col = next(i for i, c in enumerate(lowered) if c.startswith("gmp") or "gmp(" in c)
+            name_col = next((i for i, c in enumerate(lowered) if "ipo" in c or "company" in c or "name" in c), 0)
             continue
-        name = cells[0]
-        gmp = None
-        if gmp_col is not None and gmp_col < len(cells):
-            m = rupee.search(cells[gmp_col]) or re.search(r"(-?\d+(?:\.\d+)?)", cells[gmp_col])
-            gmp = float(m.group(1)) if m else None
-        else:
-            figures = [float(m.group(1)) for c in cells[1:] for m in [rupee.search(c)] if m]
-            gmp = figures[1] if len(figures) >= 2 else (figures[0] if figures else None)
-        if name and gmp is not None and len(name) > 3:
-            out[_norm_company(name)] = gmp
+        if gmp_col is None or gmp_col >= len(cells) or name_col >= len(cells):
+            continue
+        name = cells[name_col]
+        m = rupee.search(cells[gmp_col].split("(")[0])
+        if not name or len(name) <= 3 or not m:
+            continue
+        try:
+            gmp = float(m.group(1))
+        except ValueError:
+            continue
+        if abs(gmp) > 5000:  # no real GMP is this large; the column is something else
+            continue
+        out[_norm_company(name)] = gmp
     return out
 
 
@@ -228,13 +247,23 @@ def match_gmp(listing: IPOListing, table: dict[str, float]) -> float | None:
     import difflib
 
     target = _norm_company(listing.company)
+    gmp = None
     if target in table:
-        return table[target]
-    for name, gmp in table.items():  # "kaveri foods" vs "kaveri foods beverages"
-        if len(name) >= 6 and (target.startswith(name) or name.startswith(target)):
-            return gmp
-    hit = difflib.get_close_matches(target, list(table), n=1, cutoff=0.75)
-    return table[hit[0]] if hit else None
+        gmp = table[target]
+    else:
+        for name, val in table.items():  # "kaveri foods" vs "kaveri foods beverages"
+            if len(name) >= 8 and (target.startswith(name + " ") or name.startswith(target + " ")):
+                gmp = val
+                break
+        if gmp is None:
+            hit = difflib.get_close_matches(target, list(table), n=1, cutoff=0.86)
+            gmp = table[hit[0]] if hit else None
+    # Sanity: a premium beyond +300% or a discount beyond -60% of the band is a parsing error.
+    if gmp is not None and listing.price_high:
+        pct = gmp / listing.price_high * 100
+        if pct > 300 or pct < -60:
+            return None
+    return gmp
 
 
 # ---------------------------------------------------------------- operator overrides

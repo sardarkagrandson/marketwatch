@@ -322,6 +322,19 @@ def api_ipo_status():
     return ipo_service.snapshot_status()
 
 
+@app.get("/api/ipo/diagnostics")
+def api_ipo_diagnostics():
+    """Raw NSE rows from the last fetch and the parsed GMP table, for troubleshooting field names."""
+    from app.ipo import sources as ipo_sources
+
+    gmp = {}
+    try:
+        gmp = ipo_sources.fetch_gmp_table()
+    except Exception as exc:
+        gmp = {"error": str(exc)}
+    return {"nse_raw": ipo_sources.last_raw_rows(), "gmp_table": gmp, "gmp_url": get_settings().ipo_gmp_url}
+
+
 @app.get("/api/ipo/upcoming")
 def api_ipo_upcoming(force: bool = False):
     out = []

@@ -16,7 +16,7 @@ def test_parse_nse_issue_row():
     l = sources.parse_nse_issue(row, today)
     assert l.key == "ABCD" and l.symbol == "ABCD" and l.series == "EQ"
     assert (l.price_low, l.price_high) == (100.0, 105.0)
-    assert l.issue_size_cr == 1250.0 and l.subscription_times == 2.35
+    assert l.issue_shares == 12_500_000_000 and l.issue_size_cr == round(12_500_000_000 * 105 / 1e7, 2) and l.subscription_times == 2.35
     assert l.status == "open" and l.open_date == date(2026, 10, 18)
     future = sources.parse_nse_issue({"companyName": "Later Co", "issueStartDate": "25-Oct-2026", "issueEndDate": "28-Oct-2026", "issuePrice": "50", "series": "SME"}, today)
     assert future.status == "upcoming" and future.series == "SME" and future.price_low == future.price_high == 50.0
@@ -33,7 +33,8 @@ def test_parse_nse_past_and_band_helpers():
 def test_gmp_table_parse_and_match(monkeypatch):
     html = """<table><tr><th>IPO</th><th>Price</th><th>GMP</th></tr>
     <tr><td>Vedagrid Energy Storage IPO</td><td>₹328</td><td>₹58 (17.7%)</td></tr>
-    <tr><td>Kaveri Foods IPO (SME)</td><td>Rs.99</td><td>Rs. -4</td></tr></table>"""
+    <tr><td>Kaveri Foods IPO (SME)</td><td>Rs.99</td><td>Rs. -4</td></tr>
+    <tr><td>Nifty 50</td><td>24,000</td><td>₹8377</td></tr></table>"""
 
     class R:
         text = html
@@ -43,15 +44,17 @@ def test_gmp_table_parse_and_match(monkeypatch):
     monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
     table = sources.fetch_gmp_table("https://example.com/gmp")
     assert table == {"vedagrid energy storage": 58.0, "kaveri foods": -4.0}
-    assert sources.match_gmp(IPOListing(key="V", company="Vedagrid Energy Storage Ltd"), table) == 58.0
-    assert sources.match_gmp(IPOListing(key="K", company="Kaveri Foods & Beverages"), table) == -4.0
+    assert sources.match_gmp(IPOListing(key="V", company="Vedagrid Energy Storage Ltd", price_high=328), table) == 58.0
+    assert sources.match_gmp(IPOListing(key="K", company="Kaveri Foods & Beverages", price_high=99), table) == -4.0
+    # implausible premium relative to the band is rejected
+    assert sources.match_gmp(IPOListing(key="N", company="Nifty 50", price_high=700), table) is None
     assert sources.match_gmp(IPOListing(key="Z", company="Zeta Unrelated"), table) is None
     from app.config import get_settings
     monkeypatch.setattr(get_settings(), "ipo_gmp_url", "")
     assert sources.fetch_gmp_table() == {}          # empty setting disables the scrape
-    # No header row: second rupee figure is the GMP
+    # Without a header row naming the GMP column nothing is parsed (safer than guessing)
     R.text = "<table><tr><td>Nimbus Cloud IPO</td><td>₹148</td><td>₹22</td></tr></table>"
-    assert sources.fetch_gmp_table("https://example.com/gmp") == {"nimbus cloud": 22.0}
+    assert sources.fetch_gmp_table("https://example.com/gmp") == {}
 
 
 def test_overrides_apply(tmp_path, monkeypatch):

@@ -24,7 +24,7 @@ def test_issue_and_verify(keys):
 def test_rejects_wrong_device_signature_and_expiry(keys):
     priv, pub = keys
     tok = licensing.issue_token(priv, "AAAA-0000", "Ravi", days=10)
-    with pytest.raises(licensing.LicenseError, match="issued for device"):
+    with pytest.raises(licensing.LicenseError, match="valid for device"):
         licensing.verify_token(tok, pub, device_id="BBBB-1111")
     _, other_pub = licensing.generate_keypair()
     with pytest.raises(licensing.LicenseError, match="signature"):
@@ -89,3 +89,12 @@ def test_cli_roundtrip(tmp_path, monkeypatch, capsys):
     tok = [l for l in capsys.readouterr().out.splitlines() if l.startswith("SOD1.")][0]
     assert licensing.verify_token(tok, pub, "1111-2222-3333-4444").name == "Test User"
     assert (tmp_path / "issued_licenses.csv").read_text().count("\n") == 2
+
+
+def test_multi_device_key(keys):
+    priv, pub = keys
+    tok = licensing.issue_token(priv, ["AAAA-1111", "bbbb-2222"], "Two devices", days=30)
+    assert licensing.verify_token(tok, pub, device_id="AAAA-1111").devices == ["AAAA-1111", "BBBB-2222"]
+    assert licensing.verify_token(tok, pub, device_id="BBBB-2222").name == "Two devices"
+    with pytest.raises(licensing.LicenseError, match="valid for device"):
+        licensing.verify_token(tok, pub, device_id="CCCC-3333")

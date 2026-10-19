@@ -3,7 +3,7 @@
 {% block content %}
 <section class="card p-8 max-w-2xl mx-auto">
   <h1 class="text-2xl font-semibold text-ink-900 dark:text-white">Activate this device</h1>
-  <p class="mt-2 text-sm text-ink-500">{{ app_name }} only runs on devices we have added. Send us the Device ID below and paste the licence key you receive.</p>
+  <p class="mt-2 text-sm text-ink-500">{{ app_name }} only runs on devices we have approved. Send us the Device ID below and paste the access key you receive. One key can cover more than one of your devices.</p>
 
   <div class="mt-6 rounded-2xl bg-surface-1 dark:bg-surface-dark p-5">
     <p class="text-xs text-ink-500">Your Device ID</p>
@@ -18,7 +18,7 @@
   {% endif %}
 
   <form method="post" action="/activate" class="mt-6 space-y-3">
-    <label class="block text-sm"><span class="text-xs text-ink-500">Licence key</span>
+    <label class="block text-sm"><span class="text-xs text-ink-500">Access key</span>
       <textarea name="token" rows="4" required class="input mt-1 h-auto py-2 num text-xs" placeholder="SOD1.…">{{ token or '' }}</textarea></label>
     <button class="btn-primary">Activate</button>
   </form>
