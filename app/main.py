@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app import licensing, services
 from app.ipo import service as ipo_service
+from app.mf import service as mf_service
 from app.alerts import scheduler as sched
 from app.config import get_settings
 from app.db import get_db, init_db, session_scope
@@ -366,6 +367,62 @@ def api_ipo_upcoming(force: bool = False):
 @app.get("/api/ipo/listed")
 def api_ipo_listed(force: bool = False):
     return [r.model_dump(mode="json") for r in ipo_service.recently_listed(force)]
+
+
+# ================================================================= Mutual funds
+@app.get("/mf", response_class=HTMLResponse)
+def mf_page(request: Request, kind: str | None = None, q: str = "", plan: str = "direct", option: str = "growth"):
+    from app.mf.taxonomy import KIND_BY_ID
+
+    groups = mf_service.groups()
+    if kind not in KIND_BY_ID:
+        kind = None
+    schemes = mf_service.list_schemes(kind, q, plan, option) if (kind or q.strip()) else []
+    total = len(mf_service.universe())
+    return templates.TemplateResponse(
+        request, "mf.html",
+        ctx(request, groups=groups, kind=KIND_BY_ID.get(kind).as_dict() if kind else None, kind_id=kind, schemes=schemes,
+            q=q, plan=plan, option=option, total=total, today=date.today()),
+    )
+
+
+@app.get("/mf/{code}", response_class=HTMLResponse)
+def mf_fund_page(request: Request, code: str):
+    try:
+        detail = mf_service.fund_detail(code)
+    except Exception as exc:
+        return templates.TemplateResponse(request, "error.html", ctx(request, query=code, message=str(exc)), status_code=404)
+    return templates.TemplateResponse(request, "mf_fund.html", ctx(request, d=detail, today=date.today()))
+
+
+@app.get("/api/mf/kinds")
+def api_mf_kinds():
+    return mf_service.groups()
+
+
+@app.get("/api/mf/schemes")
+def api_mf_schemes(kind: str | None = None, q: str = "", plan: str = "direct", option: str = "growth", limit: int = 200):
+    return [s.model_dump(mode="json") for s in mf_service.list_schemes(kind, q, plan, option, max(1, min(limit, 1000)))]
+
+
+@app.get("/api/mf/{code}")
+def api_mf_detail(code: str):
+    try:
+        return mf_service.fund_detail(code)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, str(exc))
+
+
+@app.get("/api/mf/{code}/chart")
+def api_mf_chart(code: str, range: str = "1y", start: date | None = None, end: date | None = None):
+    if range == "custom" and start is None:
+        raise HTTPException(400, "start date is required for a custom range")
+    try:
+        return mf_service.chart_series(code, range, start, end)
+    except Exception as exc:
+        raise HTTPException(502, f"Chart data unavailable: {exc}")
 
 
 # ================================================================= JSON API

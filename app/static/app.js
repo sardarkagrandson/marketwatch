@@ -153,6 +153,8 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
   var card = document.getElementById("chart-card");
   if (!card) return;
   var symbol = card.getAttribute("data-symbol");
+  var chartBase = card.getAttribute("data-chart-url") || ("/api/chart/" + encodeURIComponent(symbol));
+  var defaultRange = card.getAttribute("data-default-range") || "1y";
   var svg = document.getElementById("price-chart");
   var tip = document.getElementById("chart-tip");
   var empty = document.getElementById("chart-empty");
@@ -170,7 +172,7 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
     for (var k in attrs) e.setAttribute(k, attrs[k]);
     return e;
   }
-  function fmtPrice(v) { return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtPrice(v) { return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: v < 100 ? 4 : 2 }); }
   function fmtTime(ms, intraday, long) {
     var d = new Date(ms);
     var opts = intraday ? { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }
@@ -268,15 +270,26 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
     if (range === "custom" && !start) return;
     meta.textContent = "Loading…";
     if (ctrl) ctrl.abort(); ctrl = new AbortController();
-    var url = "/api/chart/" + encodeURIComponent(symbol) + "?range=" + range + (start ? "&start=" + start + (end ? "&end=" + end : "") : "");
+    var url = chartBase + "?range=" + range + (start ? "&start=" + start + (end ? "&end=" + end : "") : "");
     fetch(url, { signal: ctrl.signal }).then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw new Error(e.detail || "error"); }); })
       .then(draw)
       .catch(function (e) { if (e.name !== "AbortError") { meta.textContent = "Could not load chart: " + e.message; empty.classList.remove("hidden"); empty.classList.add("flex"); } });
-    try { localStorage.setItem("sod-chart-range", range); } catch (e) {}
+    try { localStorage.setItem("sod-chart-range:" + (card.getAttribute("data-chart-url") ? "mf" : "stock"), range); } catch (e) {}
   }
   btns.forEach(function (b) { b.addEventListener("click", function () { load(b.getAttribute("data-range")); }); });
   customForm.addEventListener("submit", function (ev) { ev.preventDefault(); load("custom", customForm.start.value, customForm.end.value); });
-  var saved = null; try { saved = localStorage.getItem("sod-chart-range"); } catch (e) {}
-  load(saved && saved !== "custom" ? saved : "1y");
+  var saved = null; try { saved = localStorage.getItem("sod-chart-range:" + (card.getAttribute("data-chart-url") ? "mf" : "stock")); } catch (e) {}
+  var allowed = Array.prototype.map.call(btns, function (b) { return b.getAttribute("data-range"); });
+  load(saved && saved !== "custom" && allowed.indexOf(saved) >= 0 ? saved : defaultRange);
   var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { if (state.points.length) draw({ points: state.points, intraday: state.intraday, change: parseFloat(changeEl.textContent) || 0, change_pct: 0, high: Math.max.apply(null, state.points.map(function (p) { return p[1]; })), low: Math.min.apply(null, state.points.map(function (p) { return p[1]; })) }); }, 150); });
+})();
+
+// ---- Mutual fund guide: shown once, then hidden ------------------------------
+(function () {
+  var guide = document.getElementById("mf-guide");
+  if (!guide) return;
+  function setSeen(v) { try { localStorage.setItem("sod-mf-guide-seen", v ? "1" : "0"); } catch (e) {} document.documentElement.classList.toggle("mf-guide-seen", v); }
+  var hide = document.getElementById("mf-guide-hide"), show = document.getElementById("mf-guide-show");
+  if (hide) hide.addEventListener("click", function () { setSeen(true); });
+  if (show) show.addEventListener("click", function () { setSeen(false); guide.scrollIntoView({ behavior: "smooth" }); });
 })();

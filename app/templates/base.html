@@ -14,6 +14,7 @@
         if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
           document.documentElement.classList.add("dark");
         }
+        if (localStorage.getItem("sod-mf-guide-seen") === "1") document.documentElement.classList.add("mf-guide-seen");
       } catch (e) {}
     })();
   </script>
@@ -37,6 +38,7 @@
         </label>
       </form>
       <nav class="hidden md:flex items-center gap-1 text-sm font-medium">
+        <a href="/mf" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/mf') %}text-mint-600{% endif %}">Mutual funds</a>
         <a href="/ipo" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/ipo') %}text-mint-600{% endif %}">IPO</a>
         <a href="/spotlight" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/spotlight') %}text-mint-600{% endif %}">Spotlight</a>
         <a href="/portfolio" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/portfolio') %}text-mint-600{% endif %}">Portfolio</a>
@@ -49,7 +51,7 @@
     </div>
     <div class="md:hidden border-t border-surface-line dark:border-surface-darkline">
       <div class="max-w-6xl mx-auto px-4 h-10 flex items-center gap-4 text-sm font-medium">
-        <a href="/ipo">IPO</a><a href="/spotlight">Spotlight</a><a href="/portfolio">Portfolio</a>
+        <a href="/mf">Funds</a><a href="/ipo">IPO</a><a href="/spotlight">Spotlight</a><a href="/portfolio">Portfolio</a>
       </div>
     </div>
   </header>

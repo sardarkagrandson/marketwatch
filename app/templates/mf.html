@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Mutual funds - {{ app_name }}{% endblock %}
+{% block content %}
+<section class="flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <h1 class="text-xl font-semibold text-ink-900 dark:text-white">Mutual funds</h1>
+    <p class="text-sm text-ink-500">{{ "{:,}".format(total) }} schemes with official daily NAVs, grouped by what each kind is for.</p>
+  </div>
+  <button type="button" id="mf-guide-show" class="btn-ghost text-sm">Show the fund types guide</button>
+</section>
+
+<!-- One-time guide -->
+<section id="mf-guide" class="card p-6 md:p-8">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="max-w-2xl">
+      <p class="inline-flex items-center gap-2 text-xs font-medium text-indigo bg-indigo-50 dark:bg-indigo/20 px-3 py-1 rounded-full">First time here? Two minutes on fund types</p>
+      <h2 class="mt-3 text-2xl font-semibold text-ink-900 dark:text-white">Pick the kind of fund before picking a fund.</h2>
+      <p class="mt-2 text-ink-500">Every mutual fund belongs to a SEBI-defined category that fixes what it can hold. The category decides most of the risk and the suitable holding period; the specific fund matters less. Here is what each kind is for.</p>
+    </div>
+    <button type="button" id="mf-guide-hide" class="btn-primary">Got it, hide this guide</button>
+  </div>
+  {% for g in groups %}
+  <h3 class="mt-6 mb-2 text-sm font-semibold uppercase tracking-wide text-ink-500">{{ g.group }}</h3>
+  <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+    {% for k in g.kinds %}
+    <a href="/mf?kind={{ k.id }}" class="rounded-2xl border border-surface-line dark:border-surface-darkline p-4 hover:border-mint block">
+      <div class="flex items-start justify-between gap-2">
+        <p class="font-semibold text-ink-900 dark:text-white">{{ k.name }}</p>
+        {{ m.pill(k.risk, "bullish" if k.risk == "Low" else "neutral" if "moderate" in k.risk | lower and "high" not in k.risk | lower else "warning" if k.risk in ("Moderately high", "High") else "bearish") }}
+      </div>
+      <p class="mt-1 text-sm text-ink-700 dark:text-slate-300 font-medium">{{ k.use_case }}</p>
+      <p class="mt-1 text-xs text-ink-500">{{ k.description }}</p>
+      <p class="mt-2 text-xs text-ink-500">Hold for: <span class="text-ink-700 dark:text-slate-300">{{ k.horizon }}</span></p>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <p class="mt-6 text-xs text-ink-500">Risk labels follow SEBI's riskometer conventions. Past returns are not a guarantee; this guide is education, not advice. You can bring it back any time with "Show the fund types guide".</p>
+</section>
+
+<!-- Browser -->
+<section class="card p-5 md:p-6">
+  <form method="get" action="/mf" class="grid md:grid-cols-6 gap-3 items-end">
+    <label class="text-sm md:col-span-2"><span class="text-xs text-ink-500">Kind</span>
+      <select class="input mt-1" name="kind">
+        <option value="">All kinds</option>
+        {% for g in groups %}<optgroup label="{{ g.group }}">{% for k in g.kinds %}<option value="{{ k.id }}" {% if kind_id == k.id %}selected{% endif %}>{{ k.name }} ({{ k.count }})</option>{% endfor %}</optgroup>{% endfor %}
+      </select></label>
+    <label class="text-sm md:col-span-2"><span class="text-xs text-ink-500">Search fund or AMC</span><input class="input mt-1" name="q" value="{{ q }}" placeholder="e.g. Nifty 50, Parag Parikh, HDFC"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Plan</span>
+      <select class="input mt-1" name="plan"><option value="direct" {% if plan == "direct" %}selected{% endif %}>Direct (lower cost)</option><option value="regular" {% if plan == "regular" %}selected{% endif %}>Regular</option><option value="all" {% if plan == "all" %}selected{% endif %}>All</option></select></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Option</span>
+      <select class="input mt-1" name="option"><option value="growth" {% if option == "growth" %}selected{% endif %}>Growth</option><option value="idcw" {% if option == "idcw" %}selected{% endif %}>IDCW (payout)</option><option value="all" {% if option == "all" %}selected{% endif %}>All</option></select></label>
+    <div class="md:col-span-6 flex flex-wrap gap-2"><button class="btn-primary">Show funds</button>
+      {% if kind %}<span class="text-sm text-ink-500 self-center">{{ kind.name }}: {{ kind.use_case }}</span>{% endif %}</div>
+  </form>
+
+  {% if kind or q %}
+  <div class="mt-5 overflow-x-auto">
+    {% if schemes %}
+    <table class="table min-w-[640px]">
+      <thead><tr><th>Scheme</th><th>AMC</th><th class="text-right">NAV</th><th>As of</th><th></th></tr></thead>
+      <tbody>
+      {% for s in schemes %}
+        <tr>
+          <td><a href="/mf/{{ s.code }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ s.name }}</a><p class="text-xs text-ink-500">{{ s.amfi_category.split("(")[-1].rstrip(")") }}</p></td>
+          <td class="text-xs text-ink-500">{{ s.amc }}</td>
+          <td class="text-right">{{ m.money(s.nav, 4 if s.nav and s.nav < 100 else 2) }}</td>
+          <td class="text-xs text-ink-500 whitespace-nowrap">{{ s.nav_date.strftime("%d %b %Y") if s.nav_date else "-" }}</td>
+          <td><a href="/mf/{{ s.code }}" class="btn-ghost text-xs py-1 px-3">Returns &amp; chart</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if schemes | length >= 200 %}<p class="mt-2 text-xs text-ink-500">Showing the first 200; narrow with a search term.</p>{% endif %}
+    {% else %}
+    <p class="text-sm text-ink-500">No schemes match. {% if total == 0 %}The AMFI NAV file could not be fetched; try again in a minute.{% endif %}</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="mt-4 text-sm text-ink-500">Choose a kind above, or search by name, to list funds. Direct plans and the growth option are shown by default because they cost less and compound without payouts.</p>
+  {% endif %}
+</section>
+<p class="text-xs text-ink-500">NAVs from AMFI (published nightly); history from mfapi.in. Not investment advice; mutual fund investments are subject to market risk, read all scheme-related documents carefully.</p>
+{% endblock %}

@@ -22,6 +22,7 @@ with a toggleable dark mode.
 | Cutoff probability | `P(touch) = 2 * [1 - Phi(|ln(P_target/P_0)| / (sigma * sqrt(T)))]` using 1-year realised volatility, with the assumptions stated on screen. |
 | Spotlight watchlist | APScheduler (SQLite job store) polls each ticker on its own interval during market hours. HTML email alerts (aiosmtplib) when a cutoff is hit or a news item scores beyond +/-0.7, with news context and a technical summary. |
 | IPO intelligence | Upcoming & ongoing issues from NSE (price band, lot, size, fresh vs OFS, subscription) with grey-market premium, DRHP metrics, a structured strengths / risks / sentiment read (AI model, with a rules fallback) and a 14-day news feed; recently listed IPOs with listing-day and till-date returns. |
+| Mutual funds | Every scheme from AMFI's daily NAV file, grouped into plain-language kinds (liquid, large cap, small cap, index, ELSS, hybrid, gold, ...). A one-time guide explains what each kind is for, its risk and holding period, then hides itself. Fund pages show 1M to 5Y returns (annualised beyond a year) and a NAV chart from mfapi.in history. |
 | Portfolio health | Holdings with buy price / quantity / date. Net P&L, day change, value-weighted sentiment exposure, and flags for negative catalysts, RSI extremes and 200 EMA breaks. |
 
 ## Quick start
@@ -169,6 +170,7 @@ open the app. Set `BIND_HOST=0.0.0.0` to allow other devices on the same network
 | `POST /api/probability` | `{query, target_price, horizon_days}` -> touch probability and assumptions. |
 | `GET/POST /api/spotlight`, `PATCH/DELETE /api/spotlight/{id}`, `POST /api/spotlight/{id}/poll` | Watchlist CRUD and on-demand poll. |
 | `GET /api/alerts` | Alert delivery log. |
+| `GET /api/mf/kinds`, `GET /api/mf/schemes?kind=&q=&plan=&option=`, `GET /api/mf/{code}`, `GET /api/mf/{code}/chart?range=` | Mutual fund kinds, scheme lists, fund detail with returns, NAV chart series. |
 | `GET /api/ipo/upcoming`, `GET /api/ipo/listed` | IPO cards with assessment and news; recent listings with returns (`?force=true` refetches). |
 | `GET/POST /api/portfolio`, `DELETE /api/portfolio/{id}` | Holdings and portfolio health. |
 | `GET /api/health` | Service status, market state, scheduler state. |

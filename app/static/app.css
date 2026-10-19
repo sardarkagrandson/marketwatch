@@ -78,3 +78,8 @@ html.dark .chart-tip { background: #fff; color: #1E222D; }
 .chart-axis { fill: var(--ink-500); font-size: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; }
 .ipo-card > summary { border-radius: 1rem; }
 .ipo-card[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+/* Mutual fund guide visibility (class set before paint from localStorage) */
+html.mf-guide-seen #mf-guide { display: none; }
+#mf-guide-show { display: none; }
+html.mf-guide-seen #mf-guide-show { display: inline-flex; }
