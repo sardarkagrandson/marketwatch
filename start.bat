@@ -21,9 +21,14 @@ if not exist .env (
 )
 
 echo Starting SnitchofDalal (first start downloads ~400 MB and can take a few minutes)...
-REM Prefer the prebuilt image; if it is not available, compose builds it locally.
-docker compose pull --ignore-pull-failures --quiet >nul 2>nul
-docker compose up -d
+REM Prefer the prebuilt image; if it cannot be pulled, build from this folder so updates
+REM to the code are always picked up.
+docker compose pull --quiet >nul 2>nul
+if errorlevel 1 (
+  docker compose up -d --build
+) else (
+  docker compose up -d
+)
 if errorlevel 1 (
   echo Something went wrong. Scroll up for the error, or run: docker compose logs
   pause

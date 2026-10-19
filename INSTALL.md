@@ -52,8 +52,32 @@ work; ask us for a new one.
   watchlist, portfolio and saved alerts are kept.
 - **Start again:** run the start script again.
 - **Update to a newer version:** download the new ZIP, unzip it over the old
-  folder (keep your `.env` file), then run the start script. Data is stored in a
-  Docker volume, not in the folder, so it survives updates.
+  folder (keep your `.env` file), then run the start script. It rebuilds the app
+  from the new files. Data is stored in a Docker volume, not in the folder, so it
+  survives updates.
+
+### Upgrading from the first release (named "MarketWatch")
+
+The first release used the name *marketwatch* for its container and data volume.
+Before starting the new version once, remove the old container so the port is
+free (your data volume is not touched by this):
+
+```
+docker rm -f marketwatch
+```
+
+Then run the start script as usual. The new version starts with an empty
+watchlist and portfolio. If you want to carry over what you had, run this once
+after the new version has started at least once, then restart it:
+
+```
+docker run --rm -v marketwatch_marketwatch-data:/from -v snitchofdalal_snitchofdalal-data:/to alpine sh -c "cp -a /from/. /to/ && mv /to/marketwatch.db /to/snitchofdalal.db"
+docker compose restart
+```
+
+(If your folder was not called `marketwatch` or `snitchofdalal`, list the volume
+names with `docker volume ls` and substitute them.) Once you are happy, the old
+volume can be removed with `docker volume rm marketwatch_marketwatch-data`.
 
 ## Optional settings (the `.env` file)
 

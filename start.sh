@@ -20,9 +20,13 @@ if [ ! -f .env ]; then
 fi
 
 echo "Starting SnitchofDalal (first start downloads ~400 MB and can take a few minutes)..."
-# Prefer the prebuilt image; if it is not available, compose builds it locally.
-docker compose pull --ignore-pull-failures --quiet >/dev/null 2>&1 || true
-docker compose up -d
+# Prefer the prebuilt image; if it cannot be pulled, build from this folder so updates
+# to the code are always picked up.
+if docker compose pull --quiet >/dev/null 2>&1; then
+  docker compose up -d
+else
+  docker compose up -d --build
+fi
 
 PORT="${APP_PORT:-8000}"
 URL="http://localhost:${PORT}"
