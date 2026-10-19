@@ -218,3 +218,11 @@ keys are required.
 - "Keyword news scoring" in the status bar means no `ANTHROPIC_API_KEY` is set, so
   headlines are scored with the built-in financial keyword dictionary. Add a key to
   switch to the AI model's structured classification; the badge changes to "AI news scoring".
+
+## Acknowledgements
+
+The code in this repository was written with the help of
+[Claude Code](https://claude.com/claude-code), Anthropic's AI coding assistant, working
+from the product specification and feedback provided by the project owner. Market data
+comes from NSE and Yahoo Finance; news from Google News and Yahoo Finance RSS feeds.
+Grey-market premiums are compiled from public IPO tracking pages and are unofficial.
