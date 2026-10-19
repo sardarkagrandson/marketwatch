@@ -18,9 +18,12 @@ You do not need a Docker account; skip or close the sign-in screen.
 ## Step 2 - Get SnitchofDalal
 
 Download the project as a ZIP from GitHub (the green **Code** button, then
-**Download ZIP**) and unzip it somewhere easy to find, for example your
-Documents folder. You should see files named `start.bat`, `start.sh` and
-`docker-compose.yml` inside.
+**Download ZIP**, or the direct link
+https://github.com/sardarkagrandson/snitchofdalal/archive/refs/heads/main.zip)
+and unzip it somewhere easy to find, for example your Documents folder. The
+folder is called `snitchofdalal-main`; inside you should see `start.bat`,
+`start.sh` and `docker-compose.yml`. Keep the folder name once you start the
+app, because your saved data is tied to it.
 
 ## Step 3 - Start it
 

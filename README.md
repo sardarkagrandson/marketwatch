@@ -38,7 +38,7 @@ Equivalent manual commands:
 
 ```bash
 cp .env.example .env     # optional: add email / AI keys
-docker compose up -d     # builds locally, or pulls ghcr.io/sardarkagrandson/marketwatch
+docker compose up -d     # builds locally, or pulls ghcr.io/sardarkagrandson/snitchofdalal
 ```
 
 Data (watchlist, portfolio, caches, saved alert emails) lives in the

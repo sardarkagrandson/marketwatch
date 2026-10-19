@@ -3,7 +3,7 @@
 services:
   snitchofdalal:
     # Uses the prebuilt image when available; otherwise builds from this folder.
-    image: ghcr.io/sardarkagrandson/marketwatch:latest
+    image: ghcr.io/sardarkagrandson/snitchofdalal:latest
     build: .
     container_name: snitchofdalal
     restart: unless-stopped
