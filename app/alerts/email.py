@@ -87,10 +87,13 @@ async def send_html_email(to: str, subject: str, html: str) -> tuple[bool, str]:
     timeout = settings.smtp_timeout_seconds
     try:
         sock, ip = await _open_ipv4_socket(host, port, timeout) if settings.smtp_prefer_ipv4 else (None, None)
-        client = aiosmtplib.SMTP(
-            hostname=host, port=port, timeout=timeout, sock=sock,
-            use_tls=implicit_tls, start_tls=(settings.smtp_use_tls and not implicit_tls),
-        )
+        kwargs = dict(hostname=host, timeout=timeout, use_tls=implicit_tls,
+                      start_tls=(settings.smtp_use_tls and not implicit_tls))
+        if sock is not None:
+            kwargs["sock"] = sock          # aiosmtplib forbids a port alongside a socket
+        else:
+            kwargs["port"] = port
+        client = aiosmtplib.SMTP(**kwargs)
         try:
             await client.connect()
         except aiosmtplib.SMTPConnectTimeoutError as exc:
@@ -115,7 +118,7 @@ async def send_html_email(to: str, subject: str, html: str) -> tuple[bool, str]:
         log.error("email auth failed: %s", exc)
         return False, ("delivery failed: the mail server rejected the username/password. For Gmail this must be a 16-character "
                        "App Password (2-Step Verification on), not the account password.")
-    except (aiosmtplib.SMTPException, asyncio.TimeoutError, OSError) as exc:
+    except Exception as exc:  # never let an SMTP problem crash an alert or the test page
         log.error("email delivery failed: %s", exc)
         return False, f"delivery failed: {exc}"
 
