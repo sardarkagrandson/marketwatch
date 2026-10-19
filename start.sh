@@ -15,9 +15,11 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 if [ ! -f .env ]; then
-  cp .env.example .env
-  echo "Created .env from .env.example (edit it later to add email or AI settings)."
+  printf '# Per-machine overrides. Defaults for everyone live in .env.example.\n# Add only the lines you want to change, e.g. APP_PORT=8010\n' > .env
+  echo "Created .env (overrides only; shared defaults come from .env.example)."
 fi
+# An empty "KEY=" line in .env would blank out a default from .env.example; drop such lines.
+sed -i.bak -E '/^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*$/d' .env && rm -f .env.bak
 
 echo "Starting SnitchofDalal (first start downloads ~400 MB and can take a few minutes)..."
 # Prefer the prebuilt image; if it cannot be pulled, build from this folder so updates

@@ -16,9 +16,12 @@ if errorlevel 1 (
   exit /b 1
 )
 if not exist .env (
-  copy .env.example .env >nul
-  echo Created .env from .env.example ^(edit it later to add email or AI settings^).
+  echo # Per-machine overrides. Defaults for everyone live in .env.example.> .env
+  echo # Add only the lines you want to change, e.g. APP_PORT=8010>> .env
+  echo Created .env ^(overrides only; shared defaults come from .env.example^).
 )
+REM An empty "KEY=" line in .env would blank out a default from .env.example; drop such lines.
+powershell -NoProfile -Command "(Get-Content .env) | Where-Object { $_ -notmatch '^[A-Za-z_][A-Za-z0-9_]*=\s*$' } | Set-Content .env" >nul 2>nul
 
 echo Starting SnitchofDalal (first start downloads ~400 MB and can take a few minutes)...
 REM Prefer the prebuilt image; if it cannot be pulled, build from this folder so updates
