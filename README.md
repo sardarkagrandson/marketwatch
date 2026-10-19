@@ -24,6 +24,26 @@ with a toggleable dark mode.
 
 ## Quick start
 
+### Option A - Docker (recommended, no Python needed)
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), download
+this project, then double-click `start.bat` (Windows) or run `./start.sh`
+(macOS / Linux). The app opens at http://localhost:8000 and keeps running in the
+background. A step-by-step guide for non-technical users is in
+[INSTALL.md](INSTALL.md).
+
+Equivalent manual commands:
+
+```bash
+cp .env.example .env     # optional: add email / AI keys
+docker compose up -d     # builds locally, or pulls ghcr.io/sardarkagrandson/marketwatch
+```
+
+Data (watchlist, portfolio, caches, saved alert emails) lives in the
+`marketwatch-data` Docker volume, so it survives restarts and updates.
+
+### Option B - Python
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt

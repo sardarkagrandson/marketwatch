@@ -248,12 +248,20 @@ def api_probability(payload: ProbabilityRequest):
     return {"ticker": ticker.as_dict(), "quote": quote.as_dict(), "probability": prob.as_dict()}
 
 
+def _iso_utc(dt) -> str | None:
+    if dt is None:
+        return None
+    from datetime import timezone
+
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).isoformat()
+
+
 def _entry_dict(e: SpotlightEntry, next_runs: dict | None = None) -> dict:
     nr = (next_runs or {}).get(e.job_id)
     return {
         "id": e.id, "symbol": e.symbol, "name": e.name, "poll_interval_minutes": e.poll_interval_minutes,
         "cutoff_price": e.cutoff_price, "cutoff_direction": e.cutoff_direction, "email": e.email,
-        "enabled": e.enabled, "last_polled_at": e.last_polled_at.isoformat() if e.last_polled_at else None,
+        "enabled": e.enabled, "last_polled_at": _iso_utc(e.last_polled_at),
         "last_price": e.last_price, "last_sentiment": e.last_sentiment, "last_error": e.last_error,
         "next_run_at": nr.isoformat() if nr else None,
     }
@@ -298,7 +306,7 @@ async def api_spotlight_poll(entry_id: int, force: bool = True):
 def api_alerts(limit: int = 50, db: Session = Depends(get_db)):
     rows = db.query(AlertLog).order_by(AlertLog.created_at.desc()).limit(limit).all()
     return [{"id": r.id, "symbol": r.symbol, "kind": r.kind, "subject": r.subject, "recipient": r.recipient,
-             "delivered": r.delivered, "detail": r.detail, "created_at": r.created_at.isoformat()} for r in rows]
+             "delivered": r.delivered, "detail": r.detail, "created_at": _iso_utc(r.created_at)} for r in rows]
 
 
 @app.get("/api/portfolio")
