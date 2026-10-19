@@ -1,0 +1,45 @@
+/* Design tokens (Groww-inspired) - complements Tailwind utilities. */
+:root {
+  --mint: #00D09C; --crimson: #EB5B5B; --indigo: #5367FF;
+  --bg: #FFFFFF; --bg-2: #F8F9FA; --line: #EAECF0;
+  --ink-900: #1E222D; --ink-700: #44475B; --ink-500: #7C7E8C;
+}
+html.dark {
+  --bg: #1E222D; --bg-2: #121212; --line: #2B303D;
+  --ink-900: #FFFFFF; --ink-700: #D5D7E0; --ink-500: #9A9CAB;
+}
+body { line-height: 1.6; }
+.num { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.card {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(30,34,45,0.04), 0 4px 16px rgba(30,34,45,0.06);
+  display: block;
+}
+html.dark .card { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.25); }
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  background: var(--mint); color: #fff; font-weight: 600; border-radius: 9999px;
+  padding: .625rem 1.25rem; font-size: .875rem; transition: background .15s;
+}
+.btn-primary:hover { background: #00B386; }
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  border: 1px solid var(--line); color: var(--ink-700); border-radius: 9999px;
+  padding: .5rem 1rem; font-size: .875rem; background: transparent;
+}
+.btn-ghost:hover { background: var(--bg-2); }
+.btn-danger { color: var(--crimson); }
+.input {
+  height: 2.5rem; padding: 0 .875rem; border-radius: .75rem; width: 100%;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--ink-900); font-size: .875rem;
+}
+.input:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,208,156,.25); }
+.table { width: 100%; font-size: .875rem; }
+.table th { text-align: left; font-weight: 500; color: var(--ink-500); font-size: .75rem; padding: .5rem .75rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table td { padding: .75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table tr:last-child td { border-bottom: 0; }
+.hero-num { font-size: 2.5rem; line-height: 1.1; font-weight: 600; font-variant-numeric: proportional-nums; }
+.meter { height: 6px; border-radius: 9999px; background: var(--line); overflow: hidden; }
+.meter > span { display: block; height: 100%; border-radius: 9999px; }
+.range { position: relative; height: 6px; border-radius: 9999px; background: var(--line); }
+.range > i { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 9999px; background: var(--indigo); border: 2px solid var(--bg); }

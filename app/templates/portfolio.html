@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% set h = health %}
+{% block title %}Portfolio - {{ app_name }}{% endblock %}
+{% block content %}
+<section class="grid grid-cols-2 md:grid-cols-5 gap-4">
+  {{ m.stat("Invested", m.money(h.invested, 0)) }}
+  {{ m.stat("Current value", m.money(h.market_value, 0)) }}
+  {{ m.stat("Net P&L", m.signed(h.net_pnl, "", 0), m.signed(h.net_pnl_pct, "%")) }}
+  {{ m.stat("Day's change", m.signed(h.day_change, "", 0), m.signed(h.day_change_pct, "%")) }}
+  <div class="card p-4">
+    <p class="text-xs text-ink-500 mb-1">Weighted sentiment</p>
+    <div class="text-lg font-semibold">{{ m.signed(h.weighted_sentiment) }}</div>
+    <div class="mt-1">{{ m.bias_pill(h.sentiment_label) }}</div>
+  </div>
+</section>
+
+<section class="card p-6 overflow-x-auto">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-ink-900 dark:text-white">Holdings</h1>
+    {% if h.flagged_count %}{{ m.pill(h.flagged_count ~ " flagged", "warning") }}{% endif %}
+  </div>
+  {% if h.holdings %}
+  <table class="table mt-4 min-w-[900px]">
+    <thead><tr><th>Stock</th><th class="text-right">Qty</th><th class="text-right">Avg buy</th><th class="text-right">LTP</th><th class="text-right">Value</th><th class="text-right">P&amp;L</th><th class="text-right">Day</th><th>Sentiment</th><th>Flags</th><th></th></tr></thead>
+    <tbody>
+    {% for r in h.holdings %}
+      <tr>
+        <td><a href="/stock/{{ r.symbol }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ r.symbol }}</a><p class="text-xs text-ink-500">{{ r.name }} &middot; since {{ r.buy_date }}</p>{% if r.error %}<p class="text-xs text-crimson-600">{{ r.error }}</p>{% endif %}</td>
+        <td class="text-right num">{{ "{:g}".format(r.quantity) }}</td>
+        <td class="text-right">{{ m.money(r.buy_price) }}</td>
+        <td class="text-right">{{ m.money(r.ltp) }}{% if r.is_stale %}<p class="text-[10px] text-amber-600">prev close</p>{% endif %}</td>
+        <td class="text-right">{{ m.money(r.market_value, 0) }}</td>
+        <td class="text-right">{{ m.signed(r.pnl, "", 0) }}<br><span class="text-xs">{{ m.signed(r.pnl_pct, "%") }}</span></td>
+        <td class="text-right">{{ m.signed(r.day_change, "", 0) }}<br><span class="text-xs">{{ m.signed(r.day_change_pct, "%") }}</span></td>
+        <td>{{ m.signed(r.sentiment_score) }}<br>{{ m.bias_pill(r.momentum_bias) if r.momentum_bias != "n/a" else "" }}</td>
+        <td class="text-xs space-y-1 max-w-xs">
+          {% for f in r.flags %}<p class="flex gap-1.5 items-start"><span class="{% if f.level == 'critical' %}text-crimson{% elif f.level == 'warning' %}text-amber-500{% else %}text-indigo{% endif %}">&#9679;</span><span>{{ f.text }}</span></p>{% else %}<span class="text-ink-500">none</span>{% endfor %}
+        </td>
+        <td><form method="post" action="/portfolio/{{ r.id }}/delete" data-confirm="Remove this holding?"><button class="btn-ghost btn-danger text-xs py-1 px-3">Remove</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="mt-3 text-sm text-ink-500">No holdings logged yet.</p>{% endif %}
+</section>
+
+<section class="card p-6">
+  <h2 class="font-semibold text-ink-900 dark:text-white">Log a holding</h2>
+  <form method="post" action="/portfolio/add" class="mt-4 grid md:grid-cols-5 gap-3 items-end">
+    <label class="text-sm md:col-span-2"><span class="text-xs text-ink-500">Company / ticker</span><input class="input mt-1" name="query" required value="{{ request.query_params.get('q', '') }}" placeholder="e.g. HDFC Bank"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Buy price (&#8377;)</span><input class="input mt-1" name="buy_price" type="number" step="0.05" min="0.05" required></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Quantity</span><input class="input mt-1" name="quantity" type="number" step="1" min="0.0001" required></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Buy date</span><input class="input mt-1" name="buy_date" type="date" max="{{ today }}" value="{{ today }}" required></label>
+    <div class="md:col-span-5"><button class="btn-primary">Add holding</button></div>
+  </form>
+</section>
+{% endblock %}

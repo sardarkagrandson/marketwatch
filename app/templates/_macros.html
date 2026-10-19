@@ -1,0 +1,41 @@
+{% macro pill(text, tone="neutral") -%}
+{%- set cls = {
+  "bullish": "bg-mint-50 text-mint-600 dark:bg-mint/15",
+  "bearish": "bg-crimson-50 text-crimson-600 dark:bg-crimson/15",
+  "neutral": "bg-surface-line text-ink-700 dark:bg-surface-darkline dark:text-slate-300",
+  "indigo": "bg-indigo-50 text-indigo dark:bg-indigo/20",
+  "warning": "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+}[tone] -%}
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ cls }}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro sentiment_pill(s) -%}
+{{ pill(s, "bullish" if s == "Bullish" else "bearish" if s == "Bearish" else "neutral") }}
+{%- endmacro %}
+
+{% macro bias_pill(b) -%}
+{{ pill(b, "bullish" if "Bullish" in b else "bearish" if "Bearish" in b else "neutral") }}
+{%- endmacro %}
+
+{% macro category_pill(c) -%}
+{{ pill(c, {"Earnings": "indigo", "Regulatory/Legal": "warning", "Product/Expansion": "bullish", "Macro/Sector": "neutral", "Management": "neutral", "Other": "neutral"}.get(c, "neutral")) }}
+{%- endmacro %}
+
+{% macro money(v, decimals=2) -%}
+{%- if v is none %}&mdash;{% else %}<span class="num">&#8377;{{ "{:,.{p}f}".format(v, p=decimals) }}</span>{% endif -%}
+{%- endmacro %}
+
+{% macro signed(v, suffix="", decimals=2) -%}
+{%- if v is none %}<span class="num">&mdash;</span>{% else -%}
+<span class="num {% if v > 0 %}text-mint-600{% elif v < 0 %}text-crimson-600{% endif %}">{{ "+" if v > 0 else "" }}{{ "{:,.{p}f}".format(v, p=decimals) }}{{ suffix }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro stat(label, value_html, delta_html="", note="") -%}
+<div class="card p-4">
+  <p class="text-xs text-ink-500 mb-1">{{ label }}</p>
+  <div class="text-lg font-semibold text-ink-900 dark:text-white">{{ value_html | safe }}</div>
+  {% if delta_html %}<div class="text-sm mt-0.5">{{ delta_html | safe }}</div>{% endif %}
+  {% if note %}<p class="text-xs text-ink-500 mt-1">{{ note }}</p>{% endif %}
+</div>
+{%- endmacro %}

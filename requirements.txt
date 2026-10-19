@@ -1,0 +1,21 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+pydantic[email]>=2.7
+pydantic-settings>=2.3
+SQLAlchemy>=2.0
+APScheduler>=3.10,<4
+yfinance>=0.2.40
+nsemine>=2.0
+pandas>=2.2
+numpy>=1.26
+feedparser>=6.0
+httpx>=0.27
+aiosmtplib>=3.0
+anthropic>=1.0
+python-dotenv>=1.0
+pytest>=8.0
+# Optional: `ta` provides reference implementations of the same indicators.
+# The app computes RSI/EMA/ATR natively with pandas so it is not required.
+# ta>=0.11 ; python_version < "3.13"

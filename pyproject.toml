@@ -1,0 +1,9 @@
+[project]
+name = "marketwatch"
+version = "0.1.0"
+description = "Indian stock market sentiment and technical intelligence tool"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

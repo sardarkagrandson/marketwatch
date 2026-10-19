@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% set q = a.quote %}{% set t = a.technicals %}{% set s = a.sentiment %}
+{% block title %}{{ a.ticker.name }} ({{ a.ticker.base_symbol }}) - {{ app_name }}{% endblock %}
+{% block content %}
+
+<!-- Header + hero price -->
+<section class="card p-6">
+  <div class="flex flex-col lg:flex-row lg:items-start gap-6">
+    <div class="flex-1">
+      <div class="flex flex-wrap items-center gap-2">
+        <h1 class="text-2xl font-semibold text-ink-900 dark:text-white">{{ a.ticker.name }}</h1>
+        {{ m.pill(a.ticker.symbol, "neutral") }}
+        {{ m.pill(a.ticker.exchange, "indigo") }}
+        {% if a.ticker.confidence < 0.9 %}{{ m.pill("Matched via " ~ a.ticker.method ~ " (" ~ (a.ticker.confidence * 100) | round | int ~ "%)", "warning") }}{% endif %}
+      </div>
+      <div class="mt-4 flex flex-wrap items-end gap-x-4 gap-y-1">
+        <span class="hero-num text-ink-900 dark:text-white">&#8377;{{ "{:,.2f}".format(q.ltp) }}</span>
+        <span class="text-lg">{{ m.signed(q.change) }} <span class="text-ink-500">(</span>{{ m.signed(q.change_pct, "%") }}<span class="text-ink-500">)</span></span>
+      </div>
+      <p class="mt-1 text-xs text-ink-500">
+        {% if q.is_stale %}<span class="text-amber-600 dark:text-amber-400 font-medium">Previous-session close</span> &middot; {% endif %}
+        as of {{ q.as_of[:16] | replace("T", " ") }} &middot; source: {{ q.source }} &middot; {{ a.market.label }}
+      </p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <a href="/spotlight?q={{ a.ticker.symbol }}" class="btn-primary">Add to Spotlight</a>
+        <a href="/portfolio?q={{ a.ticker.symbol }}" class="btn-ghost">Log holding</a>
+        <a href="/api/stock/{{ a.ticker.symbol }}" class="btn-ghost">JSON</a>
+      </div>
+    </div>
+    <div class="lg:w-72">
+      <p class="text-xs text-ink-500 mb-1">Last 60 sessions</p>
+      <svg class="w-full h-14" data-sparkline='{{ a.sparkline | tojson }}' data-up="{{ 'true' if a.sparkline and a.sparkline[-1] >= a.sparkline[0] else 'false' }}" role="img" aria-label="60 session close price sparkline"></svg>
+    </div>
+  </div>
+</section>
+
+<!-- KPI row -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+  {{ m.stat("Previous close", m.money(q.previous_close), "", "Open " ~ ("{:,.2f}".format(q.open) if q.open else "-")) }}
+  <div class="card p-4">
+    <p class="text-xs text-ink-500 mb-1">Day range</p>
+    <div class="text-sm font-semibold text-ink-900 dark:text-white flex justify-between"><span class="num">{{ "{:,.2f}".format(q.day_low or 0) }}</span><span class="num">{{ "{:,.2f}".format(q.day_high or 0) }}</span></div>
+    {% set lo, hi = q.day_low or q.ltp, q.day_high or q.ltp %}
+    <div class="range mt-2"><i style="left: {{ (((q.ltp - lo) / (hi - lo)) * 100) | round(1) if hi > lo else 50 }}%"></i></div>
+  </div>
+  <div class="card p-4">
+    <p class="text-xs text-ink-500 mb-1">52-week range</p>
+    <div class="text-sm font-semibold text-ink-900 dark:text-white flex justify-between"><span class="num">{{ "{:,.2f}".format(q.week52_low or 0) }}</span><span class="num">{{ "{:,.2f}".format(q.week52_high or 0) }}</span></div>
+    {% set lo, hi = q.week52_low or q.ltp, q.week52_high or q.ltp %}
+    <div class="range mt-2"><i style="left: {{ (((q.ltp - lo) / (hi - lo)) * 100) | round(1) if hi > lo else 50 }}%"></i></div>
+  </div>
+  {{ m.stat("Volume", '<span class="num">' ~ ("{:,.0f}".format(q.volume) if q.volume else "-") ~ '</span>', "", "shares, last session") }}
+</section>
+
+<!-- Technicals + Sentiment -->
+<section class="grid lg:grid-cols-2 gap-4">
+  <div class="card p-6">
+    <div class="flex items-center justify-between">
+      <h2 class="font-semibold text-ink-900 dark:text-white">Technical setups</h2>
+      {{ m.pill("EMA trend: " ~ t.ema_trend, "bullish" if t.ema_trend == "bullish" else "bearish" if t.ema_trend == "bearish" else "neutral") }}
+    </div>
+    <div class="mt-4">
+      <div class="flex justify-between text-sm"><span class="text-ink-500">RSI (14)</span><span class="num font-medium text-ink-900 dark:text-white">{{ t.rsi_14 if t.rsi_14 is not none else "-" }} <span class="text-xs text-ink-500">{{ t.rsi_state }}</span></span></div>
+      <div class="meter mt-1"><span style="width: {{ t.rsi_14 or 0 }}%; background: {% if t.rsi_state == 'overbought' %}#EB5B5B{% elif t.rsi_state == 'oversold' %}#5367FF{% else %}#00D09C{% endif %}"></span></div>
+      <div class="flex justify-between text-[10px] text-ink-500 mt-0.5"><span>0</span><span>30</span><span>70</span><span>100</span></div>
+    </div>
+    <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+      {% for label, val in [("EMA 20", t.ema_20), ("EMA 50", t.ema_50), ("EMA 200", t.ema_200), ("ATR 20", t.atr_20)] %}
+      <div class="flex justify-between"><dt class="text-ink-500">{{ label }}</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ "{:,.2f}".format(val) if val is not none else "-" }}</dd></div>
+      {% endfor %}
+      <div class="flex justify-between"><dt class="text-ink-500">ATR %</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ t.atr_pct ~ "%" if t.atr_pct is not none else "-" }}</dd></div>
+      <div class="flex justify-between"><dt class="text-ink-500">Ann. volatility</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ (t.annualized_volatility * 100) | round(1) ~ "%" if t.annualized_volatility else "-" }}</dd></div>
+    </dl>
+    <div class="mt-4 grid sm:grid-cols-2 gap-3 text-sm">
+      <div>
+        <p class="text-xs font-medium text-mint-600 mb-1">Bullish setups</p>
+        {% if t.setups %}<ul class="space-y-1">{% for x in t.setups %}<li class="flex gap-2"><span class="text-mint">&#9679;</span>{{ x }}</li>{% endfor %}</ul>{% else %}<p class="text-ink-500">None detected</p>{% endif %}
+      </div>
+      <div>
+        <p class="text-xs font-medium text-crimson-600 mb-1">Breakdowns / risks</p>
+        {% if t.breakdowns %}<ul class="space-y-1">{% for x in t.breakdowns %}<li class="flex gap-2"><span class="text-crimson">&#9679;</span>{{ x }}</li>{% endfor %}</ul>{% else %}<p class="text-ink-500">None detected</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-6">
+    <div class="flex items-center justify-between">
+      <h2 class="font-semibold text-ink-900 dark:text-white">Market sentiment</h2>
+      {{ m.bias_pill(s.momentum_bias) }}
+    </div>
+    <div class="mt-4 flex items-end gap-3">
+      <span class="hero-num {% if s.score > 0.05 %}text-mint-600{% elif s.score < -0.05 %}text-crimson-600{% else %}text-ink-900 dark:text-white{% endif %}">{{ "%+.2f" | format(s.score) }}</span>
+      <span class="text-sm text-ink-500 pb-2">recency-weighted score (-1 to +1)<br>last 3 days: <span class="num">{{ "%+.2f" | format(s.recent_score) }}</span></span>
+    </div>
+    <div class="meter mt-3 relative">
+      <span style="width: 100%; background: linear-gradient(90deg, #EB5B5B, #EAECF0 50%, #00D09C)"></span>
+      <i class="absolute top-[-3px] w-3 h-3 rounded-full bg-ink-900 dark:bg-white border-2 border-white dark:border-surface-card" style="left: calc({{ ((s.score + 1) / 2 * 100) | round(1) }}% - 6px)"></i>
+    </div>
+    <div class="mt-4 grid grid-cols-3 gap-3 text-center text-sm">
+      <div class="rounded-xl bg-mint-50 dark:bg-mint/10 py-2"><p class="num text-lg font-semibold text-mint-600">{{ s.bullish }}</p><p class="text-xs text-ink-500">Bullish</p></div>
+      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark py-2"><p class="num text-lg font-semibold">{{ s.neutral }}</p><p class="text-xs text-ink-500">Neutral</p></div>
+      <div class="rounded-xl bg-crimson-50 dark:bg-crimson/10 py-2"><p class="num text-lg font-semibold text-crimson-600">{{ s.bearish }}</p><p class="text-xs text-ink-500">Bearish</p></div>
+    </div>
+    <div class="mt-4 flex flex-wrap gap-1.5">{% for c, n in s.categories.items() %}{{ m.category_pill(c ~ " " ~ n) }}{% endfor %}</div>
+    <p class="mt-3 text-xs text-ink-500">{{ s.article_count }} articles, past 7 days &middot; classified by {{ "LLM (structured)" if s.method == "llm" else "keyword heuristic" if s.method == "heuristic" else s.method }} &middot; {% if s.high_impact %}<span class="text-amber-600 dark:text-amber-400 font-medium">{{ s.high_impact | length }} high-impact catalyst(s)</span>{% else %}no high-impact catalysts{% endif %}</p>
+  </div>
+</section>
+
+<!-- News matrix -->
+<section class="card p-6 overflow-x-auto">
+  <h2 class="font-semibold text-ink-900 dark:text-white">News sentiment matrix</h2>
+  <p class="text-xs text-ink-500 mt-1">Fetched {{ a.news_fetched_at.strftime("%d %b %H:%M UTC") }} &middot; cached to avoid feed throttling</p>
+  {% if matrix %}
+  <table class="table mt-4 min-w-[720px]">
+    <thead><tr><th>Headline</th><th>Category</th><th>Sentiment</th><th class="text-right">Impact</th><th>Reasoning</th></tr></thead>
+    <tbody>
+      {% for r in matrix %}
+      <tr class="{% if r.high_impact %}bg-amber-50/60 dark:bg-amber-500/5{% endif %}">
+        <td class="max-w-xs"><a href="{{ r.link }}" target="_blank" rel="noopener" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ r.headline }}</a><p class="text-xs text-ink-500 mt-0.5">{{ r.source or "unknown" }} &middot; {{ r.published_label }}</p></td>
+        <td>{{ m.category_pill(r.category) }}</td>
+        <td>{{ m.sentiment_pill(r.sentiment) }}</td>
+        <td class="text-right">{{ m.signed(r.impact_score) }}{% if r.high_impact %} <span title="High impact">&#9889;</span>{% endif %}</td>
+        <td class="text-xs text-ink-700 dark:text-slate-300 max-w-sm">{{ r.reasoning }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="mt-4 text-sm text-ink-500">No news found in the past 7 days (or feeds unreachable).</p>
+  {% endif %}
+</section>
+
+<!-- Probability calculator -->
+<section class="card p-6" id="probability">
+  <h2 class="font-semibold text-ink-900 dark:text-white">Cutoff probability calculator</h2>
+  <p class="text-xs text-ink-500 mt-1">P(touch) &asymp; 2 &middot; [1 &minus; &Phi;( |ln(P<sub>target</sub>/P<sub>0</sub>)| / (&sigma;&radic;T) )] using 1-year realised volatility.</p>
+  <form method="get" action="/stock/{{ a.ticker.symbol }}#probability" class="mt-4 grid sm:grid-cols-3 gap-3 items-end">
+    <label class="text-sm"><span class="text-xs text-ink-500">Target / cutoff price (&#8377;)</span><input class="input mt-1" type="number" step="0.05" min="0.05" name="target" value="{{ target or '' }}" required placeholder="{{ (q.ltp * 1.05) | round(2) }}"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Horizon (trading days)</span><input class="input mt-1" type="number" min="1" max="750" name="horizon" value="{{ horizon }}" required></label>
+    <button class="btn-primary h-10">Estimate</button>
+  </form>
+  {% if prob_error %}<p class="mt-3 text-sm text-crimson-600">{{ prob_error }}</p>{% endif %}
+  {% if prob %}
+  <div class="mt-5 grid md:grid-cols-3 gap-4">
+    <div class="rounded-2xl bg-surface-1 dark:bg-surface-dark p-5 md:col-span-1">
+      <p class="text-xs text-ink-500">Probability of touching &#8377;{{ "{:,.2f}".format(prob.target_price) }} within {{ prob.horizon_days }} trading days</p>
+      <p class="hero-num mt-1 {% if prob.touch_probability >= 0.5 %}text-mint-600{% else %}text-ink-900 dark:text-white{% endif %}">{{ "%.1f" | format(prob.touch_probability * 100) }}%</p>
+      <p class="text-xs text-ink-500 mt-1">target is {{ "%+.1f" | format(prob.distance_pct) }}% {{ prob.direction }} current &#8377;{{ "{:,.2f}".format(prob.current_price) }}</p>
+    </div>
+    <dl class="text-sm grid grid-cols-2 gap-y-2 md:col-span-2 content-start">
+      <dt class="text-ink-500">P(close beyond target at T)</dt><dd class="num text-right">{{ "%.1f" | format(prob.finish_beyond_probability * 100) }}%</dd>
+      <dt class="text-ink-500">Annualised volatility &sigma;</dt><dd class="num text-right">{{ "%.1f" | format(prob.sigma_annual * 100) }}%</dd>
+      <dt class="text-ink-500">Horizon volatility &sigma;&radic;T</dt><dd class="num text-right">{{ "%.2f" | format(prob.sigma_horizon * 100) }}%</dd>
+      <dt class="text-ink-500">z-score</dt><dd class="num text-right">{{ "%.3f" | format(prob.z_score) }}</dd>
+      <dt class="text-ink-500 col-span-2 mt-2 font-medium">Statistical assumptions</dt>
+      <dd class="col-span-2"><ul class="list-disc pl-5 space-y-0.5 text-xs text-ink-700 dark:text-slate-300">{% for x in prob.assumptions %}<li>{{ x }}</li>{% endfor %}</ul></dd>
+    </dl>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

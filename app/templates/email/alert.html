@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>{{ subject }}</title></head>
+<body style="margin:0;padding:24px;background:#F8F9FA;font-family:Inter,Helvetica,Arial,sans-serif;color:#44475B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;">
+    <tr><td style="padding-bottom:16px;">
+      <span style="display:inline-block;width:32px;height:32px;line-height:32px;text-align:center;border-radius:10px;background:#00D09C;color:#fff;font-weight:700;">M</span>
+      <span style="font-weight:600;color:#1E222D;margin-left:8px;">MarketWatch alert</span>
+    </td></tr>
+    <tr><td style="background:#fff;border:1px solid #EAECF0;border-radius:16px;padding:24px;">
+      <p style="margin:0;font-size:12px;color:#7C7E8C;text-transform:uppercase;letter-spacing:.04em;">{{ "Price cutoff triggered" if kind == "price" else "High-impact news catalyst" }}</p>
+      <h1 style="margin:6px 0 4px;font-size:20px;color:#1E222D;">{{ entry.name }} <span style="color:#7C7E8C;font-weight:400;">({{ entry.symbol }})</span></h1>
+      <p style="margin:0 0 16px;font-size:14px;">{{ subject }}</p>
+
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-family:'JetBrains Mono',Menlo,monospace;font-size:14px;">
+        <tr>
+          <td style="padding:12px;background:#F8F9FA;border-radius:12px;">
+            <div style="font-size:11px;color:#7C7E8C;font-family:Inter,Arial,sans-serif;">Last price{% if quote.is_stale %} (prev close){% endif %}</div>
+            <div style="font-size:24px;font-weight:600;color:#1E222D;">&#8377;{{ "{:,.2f}".format(quote.ltp) }}</div>
+            <div style="color:{{ '#00B386' if quote.change >= 0 else '#D64545' }};">{{ "%+.2f" | format(quote.change) }} ({{ "%+.2f" | format(quote.change_pct) }}%)</div>
+          </td>
+          <td style="width:12px;"></td>
+          <td style="padding:12px;background:#F8F9FA;border-radius:12px;">
+            <div style="font-size:11px;color:#7C7E8C;font-family:Inter,Arial,sans-serif;">Sentiment (7d)</div>
+            <div style="font-size:24px;font-weight:600;color:{{ '#00B386' if sentiment.score > 0.05 else '#D64545' if sentiment.score < -0.05 else '#1E222D' }};">{{ "%+.2f" | format(sentiment.score) }}</div>
+            <div style="font-family:Inter,Arial,sans-serif;font-size:12px;">{{ sentiment.momentum_bias }}</div>
+          </td>
+        </tr>
+      </table>
+
+      {% if kind == "price" %}
+      <p style="margin:16px 0 0;font-size:14px;">Cutoff: <strong>&#8377;{{ "{:,.2f}".format(extra.cutoff_price) }}</strong> ({{ "price at or above" if extra.cutoff_direction == "above" else "price at or below" }}).</p>
+      {% endif %}
+
+      <h2 style="margin:20px 0 8px;font-size:14px;color:#1E222D;">Technical summary</h2>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;">
+        <tr><td style="padding:4px 0;color:#7C7E8C;">RSI (14)</td><td style="text-align:right;font-family:Menlo,monospace;">{{ technicals.rsi_14 if technicals.rsi_14 is not none else "-" }} ({{ technicals.rsi_state }})</td></tr>
+        <tr><td style="padding:4px 0;color:#7C7E8C;">EMA 20 / 50 / 200</td><td style="text-align:right;font-family:Menlo,monospace;">{{ technicals.ema_20 or "-" }} / {{ technicals.ema_50 or "-" }} / {{ technicals.ema_200 or "-" }}</td></tr>
+        <tr><td style="padding:4px 0;color:#7C7E8C;">ATR (20)</td><td style="text-align:right;font-family:Menlo,monospace;">{{ technicals.atr_20 or "-" }} ({{ technicals.atr_pct or "-" }}%)</td></tr>
+        <tr><td style="padding:4px 0;color:#7C7E8C;">Trend</td><td style="text-align:right;">EMA {{ technicals.ema_trend }}; {{ "above" if technicals.above_ema_200 else "below" }} 200 EMA</td></tr>
+      </table>
+      {% if technicals.setups or technicals.breakdowns %}
+      <p style="margin:8px 0 0;font-size:12px;">
+        {% for x in technicals.setups %}<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:#E6FAF5;color:#00B386;">{{ x }}</span>{% endfor %}
+        {% for x in technicals.breakdowns %}<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:#FDEEEE;color:#D64545;">{{ x }}</span>{% endfor %}
+      </p>
+      {% endif %}
+
+      <h2 style="margin:20px 0 8px;font-size:14px;color:#1E222D;">News context</h2>
+      {% set rows = extra.catalysts if kind == "news" else matrix %}
+      {% if rows %}
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;border-collapse:collapse;">
+        {% for r in rows %}
+        <tr style="border-top:1px solid #EAECF0;">
+          <td style="padding:8px 8px 8px 0;"><a href="{{ r.link }}" style="color:#1E222D;text-decoration:none;font-weight:500;">{{ r.headline }}</a><div style="font-size:11px;color:#7C7E8C;">{{ r.source }} &middot; {{ r.category }} &middot; {{ r.reasoning }}</div></td>
+          <td style="padding:8px 0;text-align:right;white-space:nowrap;"><span style="padding:2px 8px;border-radius:999px;font-size:11px;background:{{ '#E6FAF5' if r.sentiment == 'Bullish' else '#FDEEEE' if r.sentiment == 'Bearish' else '#EAECF0' }};color:{{ '#00B386' if r.sentiment == 'Bullish' else '#D64545' if r.sentiment == 'Bearish' else '#44475B' }};">{{ r.sentiment }} {{ "%+.2f" | format(r.impact_score) }}</span></td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% else %}<p style="font-size:13px;color:#7C7E8C;">No recent articles.</p>{% endif %}
+
+      <p style="margin:20px 0 0;font-size:11px;color:#7C7E8C;line-height:1.5;">{{ market.label }} &middot; generated {{ generated_at }}. Signals are statistical and news-derived biases, not investment advice. Equity investments are subject to market risk. Please consult a SEBI-registered advisor before trading.</p>
+    </td></tr>
+  </table>
+</body>
+</html>

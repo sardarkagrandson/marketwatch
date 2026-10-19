@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card p-8">
+  <h1 class="text-xl font-semibold text-ink-900 dark:text-white">Could not analyse "{{ query }}"</h1>
+  <p class="mt-2 text-sm text-crimson-600">{{ message }}</p>
+  <p class="mt-4 text-sm text-ink-500">Check the symbol (NSE tickers end in .NS, BSE in .BO) or try the company name. Live data needs network access to Yahoo Finance; set <code>OFFLINE_MODE=true</code> to use demo data.</p>
+  <a href="/" class="btn-primary inline-flex mt-6">Back to search</a>
+</section>
+{% endblock %}

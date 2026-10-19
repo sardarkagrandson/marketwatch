@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Spotlight - {{ app_name }}{% endblock %}
+{% block content %}
+<section class="card p-6">
+  <h1 class="text-xl font-semibold text-ink-900 dark:text-white">Spotlight watchlist</h1>
+  <p class="text-sm text-ink-500 mt-1">Polled with APScheduler during NSE hours (09:15-15:30 IST, Mon-Fri). Alerts fire when the cutoff is hit or a news item scores beyond &plusmn;0.7.{% if not smtp_enabled %} <span class="text-amber-600 dark:text-amber-400">SMTP not configured: alert emails are saved to data/outbox/.</span>{% endif %}</p>
+  <form method="post" action="/spotlight/add" class="mt-5 grid md:grid-cols-6 gap-3 items-end">
+    <label class="text-sm md:col-span-2"><span class="text-xs text-ink-500">Company / ticker</span><input class="input mt-1" name="query" required value="{{ request.query_params.get('q', '') }}" placeholder="e.g. Infosys"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Poll interval</span>
+      <select class="input mt-1" name="poll_interval_minutes">
+        <option value="15">Every 15m</option><option value="30">Every 30m</option><option value="60" selected>Every 1h</option><option value="120">Every 2h</option><option value="240">Every 4h</option>
+      </select></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Cutoff price (&#8377;)</span><input class="input mt-1" name="cutoff_price" type="number" step="0.05" min="0.05" placeholder="optional"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Trigger when</span>
+      <select class="input mt-1" name="cutoff_direction"><option value="above">Price &ge; cutoff (sell / breakout)</option><option value="below">Price &le; cutoff (buy / dip)</option></select></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Email</span><input class="input mt-1" name="email" type="email" required placeholder="you@example.com"></label>
+    <div class="md:col-span-6"><button class="btn-primary">Add to Spotlight</button></div>
+  </form>
+</section>
+
+<section class="card p-6 overflow-x-auto">
+  <h2 class="font-semibold text-ink-900 dark:text-white">Watching {{ entries | length }} ticker(s)</h2>
+  {% if entries %}
+  <table class="table mt-4 min-w-[860px]">
+    <thead><tr><th>Ticker</th><th>Interval</th><th>Cutoff</th><th>Email</th><th class="text-right">Last price</th><th class="text-right">Sentiment</th><th>Last poll</th><th>Next run</th><th></th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+      <tr class="{% if not e.enabled %}opacity-60{% endif %}">
+        <td><a href="/stock/{{ e.symbol }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ e.symbol }}</a><p class="text-xs text-ink-500">{{ e.name }}</p>{% if e.last_error %}<p class="text-xs text-crimson-600">{{ e.last_error[:80] }}</p>{% endif %}</td>
+        <td class="num">{{ e.poll_interval_minutes }}m</td>
+        <td>{% if e.cutoff_price %}{{ m.pill(("≥ " if e.cutoff_direction == "above" else "≤ ") ~ "₹" ~ "{:,.2f}".format(e.cutoff_price), "bullish" if e.cutoff_direction == "above" else "indigo") }}{% else %}<span class="text-ink-500">news only</span>{% endif %}</td>
+        <td class="text-xs">{{ e.email }}</td>
+        <td class="text-right">{{ m.money(e.last_price) }}</td>
+        <td class="text-right">{{ m.signed(e.last_sentiment) }}</td>
+        <td class="text-xs text-ink-500">{{ e.last_polled_at.strftime("%d %b %H:%M") if e.last_polled_at else "never" }}</td>
+        <td class="text-xs text-ink-500">{% set nr = next_runs.get(e.job_id) %}{{ nr.strftime("%d %b %H:%M") if nr else ("paused" if not e.enabled else "-") }}</td>
+        <td class="whitespace-nowrap">
+          <form method="post" action="/spotlight/{{ e.id }}/poll" class="inline"><button class="btn-ghost text-xs py-1 px-3">Poll now</button></form>
+          <form method="post" action="/spotlight/{{ e.id }}/toggle" class="inline"><button class="btn-ghost text-xs py-1 px-3">{{ "Pause" if e.enabled else "Resume" }}</button></form>
+          <form method="post" action="/spotlight/{{ e.id }}/delete" class="inline" data-confirm="Remove {{ e.symbol }} from Spotlight?"><button class="btn-ghost btn-danger text-xs py-1 px-3">Remove</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="mt-3 text-sm text-ink-500">Nothing in Spotlight yet.</p>{% endif %}
+</section>
+
+<section class="card p-6 overflow-x-auto">
+  <h2 class="font-semibold text-ink-900 dark:text-white">Recent alerts</h2>
+  {% if logs %}
+  <table class="table mt-4">
+    <thead><tr><th>When</th><th>Ticker</th><th>Type</th><th>Subject</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+      <tr><td class="text-xs text-ink-500 whitespace-nowrap">{{ l.created_at.strftime("%d %b %H:%M") }}</td><td class="font-medium">{{ l.symbol }}</td><td>{{ m.pill(l.kind, "indigo" if l.kind == "news" else "bullish") }}</td><td class="text-sm">{{ l.subject }}</td><td class="text-xs">{{ m.pill("delivered", "bullish") if l.delivered else m.pill("saved to outbox" if "outbox" in l.detail else "failed", "warning" if "outbox" in l.detail else "bearish") }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="mt-3 text-sm text-ink-500">No alerts sent yet.</p>{% endif %}
+</section>
+{% endblock %}

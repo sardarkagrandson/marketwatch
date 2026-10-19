@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block content %}
+<section class="card p-8 md:p-10">
+  <h1 class="text-2xl md:text-3xl font-semibold text-ink-900 dark:text-white">Indian market sentiment &amp; technical intelligence</h1>
+  <p class="mt-2 text-ink-500 max-w-2xl">Resolve any NSE / BSE company, read a structured news-sentiment matrix, check technical setups and estimate the statistical odds of a price reaching your cutoff.</p>
+  <form action="/stock" method="get" class="mt-6 flex flex-col sm:flex-row gap-3 max-w-2xl">
+    <input name="q" required placeholder="Company name or symbol, e.g. Reliance, TATAMOTORS.NS"
+           class="flex-1 h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-mint/40">
+    <button class="btn-primary h-12 px-6">Analyse</button>
+  </form>
+  <div class="mt-5 flex flex-wrap gap-2">
+    {% for p in popular %}
+    <a href="/stock/{{ p.symbol }}.NS" class="px-3 py-1.5 rounded-full text-sm bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline hover:border-mint">{{ p.name }}</a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="grid md:grid-cols-3 gap-4">
+  <a href="/spotlight" class="card p-5 hover:shadow-md">
+    <p class="font-semibold text-ink-900 dark:text-white">Spotlight watchlist</p>
+    <p class="text-sm text-ink-500 mt-1">Poll tickers during market hours and get HTML email alerts on cutoff prices and high-impact news.</p>
+    {% if spotlight %}
+    <ul class="mt-3 space-y-1 text-sm">
+      {% for e in spotlight %}
+      <li class="flex justify-between"><span>{{ e.symbol }}</span><span class="num text-ink-500">{% if e.last_price %}&#8377;{{ "{:,.2f}".format(e.last_price) }}{% else %}&mdash;{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </a>
+  <a href="/portfolio" class="card p-5 hover:shadow-md">
+    <p class="font-semibold text-ink-900 dark:text-white">Portfolio health</p>
+    <p class="text-sm text-ink-500 mt-1">Net P&amp;L, day change, weighted sentiment exposure and flags for negative catalysts or technical breakdowns.</p>
+  </a>
+  <div class="card p-5">
+    <p class="font-semibold text-ink-900 dark:text-white">Cutoff probability</p>
+    <p class="text-sm text-ink-500 mt-1">Zero-drift GBM barrier-touch estimate from one year of realised volatility. Open any stock to use it.</p>
+  </div>
+</section>
+{% endblock %}
