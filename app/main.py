@@ -395,6 +395,21 @@ def mf_fund_page(request: Request, code: str):
     return templates.TemplateResponse(request, "mf_fund.html", ctx(request, d=detail, today=date.today()))
 
 
+@app.get("/api/mf/diagnostics")
+def api_mf_diagnostics():
+    """Fetch the scheme universe now and report what each source returned."""
+    from app.mf import sources as mf_sources
+
+    result: dict = {"universe_size": len(mf_service.universe())}
+    try:
+        n = len(mf_sources.fetch_amfi())
+        result["amfi"] = {"ok": True, "schemes": n}
+    except Exception as exc:
+        result["amfi"] = {"ok": False, "error": str(exc)[:300]}
+    result["attempts"] = mf_sources.diagnostics()
+    return result
+
+
 @app.get("/api/mf/kinds")
 def api_mf_kinds():
     return mf_service.groups()

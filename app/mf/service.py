@@ -68,7 +68,15 @@ def universe(force: bool = False) -> list[Scheme]:
             except Exception as exc:
                 log.warning("AMFI NAV fetch failed: %s", exc)
                 stale = _cache_get("mf:universe:v1", timedelta(days=30))
-                schemes = [Scheme.model_validate(r) for r in stale] if stale else []
+                if stale:
+                    schemes = [Scheme.model_validate(r) for r in stale]
+                else:
+                    try:
+                        schemes = sources.fetch_mfapi_list()
+                        _cache_set("mf:universe:v1", [s.model_dump(mode="json") for s in schemes])
+                    except Exception as exc2:
+                        log.warning("mfapi.in scheme list failed too: %s", exc2)
+                        schemes = []
     with _lock:
         _universe.update(schemes=schemes, loaded_at=time.monotonic())
     return schemes

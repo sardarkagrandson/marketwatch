@@ -5,7 +5,7 @@
 <section class="flex flex-wrap items-center justify-between gap-3">
   <div>
     <h1 class="text-xl font-semibold text-ink-900 dark:text-white">Mutual funds</h1>
-    <p class="text-sm text-ink-500">{{ "{:,}".format(total) }} schemes with official daily NAVs, grouped by what each kind is for.</p>
+    <p class="text-sm text-ink-500">{% if total %}{{ "{:,}".format(total) }} schemes with official daily NAVs, grouped by what each kind is for.{% else %}<span class="text-crimson-600">The scheme list could not be downloaded yet (AMFI and mfapi.in unreachable). See <a href="/api/mf/diagnostics" class="underline">diagnostics</a>.</span>{% endif %}</p>
   </div>
   <button type="button" id="mf-guide-show" class="btn-ghost text-sm">Show the fund types guide</button>
 </section>
@@ -75,7 +75,7 @@
     </table>
     {% if schemes | length >= 200 %}<p class="mt-2 text-xs text-ink-500">Showing the first 200; narrow with a search term.</p>{% endif %}
     {% else %}
-    <p class="text-sm text-ink-500">No schemes match. {% if total == 0 %}The AMFI NAV file could not be fetched; try again in a minute.{% endif %}</p>
+    <p class="text-sm text-ink-500">No schemes match. {% if total == 0 %}The scheme list could not be downloaded from AMFI or mfapi.in. Check the container's internet access, then open <a href="/api/mf/diagnostics" class="underline">/api/mf/diagnostics</a> for details.{% endif %}</p>
     {% endif %}
   </div>
   {% else %}

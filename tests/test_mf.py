@@ -88,3 +88,22 @@ def test_mf_routes(client):
     assert client.get("/api/mf/100007").json()["returns"]["3y"] is not None
     assert len(client.get("/api/mf/100007/chart?range=all").json()["points"]) > 100
     assert client.get("/mf/999999").status_code == 404
+
+
+def test_mfapi_list_fallback(monkeypatch):
+    import httpx
+
+    class R:
+        status_code = 200
+        content = b"x"
+        def raise_for_status(self): pass
+        def json(self):
+            return [{"schemeCode": 1, "schemeName": "HDFC Small Cap Fund - Direct Plan - Growth"},
+                    {"schemeCode": 2, "schemeName": "SBI Liquid Fund Regular Growth"},
+                    {"schemeCode": 3, "schemeName": "Axis Gold ETF"},
+                    {"schemeCode": 4, "schemeName": "Kotak Nifty 50 Index Fund - Direct - Growth"}]
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    rows = sources.fetch_mfapi_list()
+    assert [r.kind for r in rows] == ["small_cap", "liquid", "gold", "index"]
+    assert rows[0].direct and rows[0].growth and not rows[1].direct

@@ -11,9 +11,19 @@ from app.mf.taxonomy import classify
 
 log = logging.getLogger(__name__)
 
-AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
+AMFI_NAV_URLS = [
+    "https://www.amfiindia.com/spages/NAVAll.txt",
+    "https://portal.amfiindia.com/spages/NAVAll.txt",
+]
 MFAPI_URL = "https://api.mfapi.in/mf/{code}"
-USER_AGENT = "Mozilla/5.0 (compatible; SnitchofDalal/0.1)"
+MFAPI_LIST_URL = "https://api.mfapi.in/mf"
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/130.0.0.0 Safari/537.36")
+_diag: dict = {}
+
+
+def diagnostics() -> dict:
+    return dict(_diag)
 
 
 class Scheme(BaseModel):
@@ -78,14 +88,83 @@ def parse_amfi(text: str) -> list[Scheme]:
 
 
 def fetch_amfi() -> list[Scheme]:
+    """Try each AMFI address; record what happened for /api/mf/diagnostics."""
     import httpx
 
-    resp = httpx.get(AMFI_NAV_URL, timeout=40, follow_redirects=True, headers={"User-Agent": USER_AGENT})
+    _diag.clear()
+    _diag.update(attempts=[], fetched_at=datetime.now().isoformat(timespec="seconds"))
+    last_error: Exception | None = None
+    for url in AMFI_NAV_URLS:
+        attempt: dict = {"url": url}
+        _diag["attempts"].append(attempt)
+        try:
+            resp = httpx.get(url, timeout=60, follow_redirects=True,
+                             headers={"User-Agent": USER_AGENT, "Accept": "text/plain,*/*"})
+            attempt.update(status=resp.status_code, bytes=len(resp.content), final_url=str(resp.url))
+            resp.raise_for_status()
+            text = resp.text
+            attempt["first_lines"] = text.splitlines()[:6]
+            schemes = parse_amfi(text)
+            attempt["parsed"] = len(schemes)
+            if len(schemes) < 100:
+                raise RuntimeError(f"AMFI file looked wrong ({len(schemes)} schemes parsed)")
+            _diag["source"] = "amfi"
+            return schemes
+        except Exception as exc:
+            attempt["error"] = str(exc)[:200]
+            last_error = exc
+            log.warning("AMFI fetch failed (%s): %s", url, exc)
+    raise RuntimeError(f"AMFI NAV file unavailable: {last_error}")
+
+
+def fetch_mfapi_list() -> list[Scheme]:
+    """Fallback universe from mfapi.in: every scheme code and name, no category or NAV.
+    Kinds are inferred from the name; NAV and returns load when a fund is opened."""
+    import httpx
+
+    attempt: dict = {"url": MFAPI_LIST_URL}
+    _diag.setdefault("attempts", []).append(attempt)
+    resp = httpx.get(MFAPI_LIST_URL, timeout=60, headers={"User-Agent": USER_AGENT})
+    attempt.update(status=resp.status_code, bytes=len(resp.content))
     resp.raise_for_status()
-    schemes = parse_amfi(resp.text)
-    if len(schemes) < 100:
-        raise RuntimeError(f"AMFI file looked wrong ({len(schemes)} schemes parsed)")
-    return schemes
+    out = []
+    for item in resp.json():
+        code, name = str(item.get("schemeCode", "")), str(item.get("schemeName", ""))
+        if not code or not name:
+            continue
+        direct, growth = _plan_flags(name)
+        out.append(Scheme(code=code, name=name, amc=_amc_from_name(name), amfi_category="(category from name)",
+                          kind=classify("", name) if classify("", name) != "other" else _kind_from_name(name),
+                          direct=direct, growth=growth))
+    attempt["parsed"] = len(out)
+    _diag["source"] = "mfapi-list"
+    return out
+
+
+_NAME_KIND = [
+    ("overnight", r"overnight"), ("liquid", r"liquid|money market|ultra short"), ("gilt", r"gilt|long duration|constant maturity"),
+    ("short_debt", r"short duration|low duration|corporate bond|banking (and|&) psu|floater|credit risk|dynamic bond|medium duration|income|debt|bond"),
+    ("elss", r"elss|tax saver|tax saving|long term equity"), ("index", r"index|etf|nifty|sensex|bees"),
+    ("small_cap", r"small ?cap"), ("mid_cap", r"mid ?cap"), ("large_cap", r"large ?cap|bluechip|blue chip|top 100|large & mid"),
+    ("flexi_cap", r"flexi|multi ?cap|focused|value|contra|opportunit|equity fund"),
+    ("sectoral", r"banking|financial|pharma|healthcare|technology|infra|consumption|psu|energy|manufactur|defence|business cycle|esg|quant|transport"),
+    ("hybrid_balanced", r"balanced advantage|dynamic asset|aggressive hybrid|hybrid equity|multi asset|arbitrage|balanced"),
+    ("hybrid_conservative", r"conservative hybrid|equity savings|regular savings|monthly income"),
+    ("solution", r"retirement|children|child"),
+]
+
+
+def _kind_from_name(name: str) -> str:
+    low = name.lower()
+    for kind, pat in _NAME_KIND:
+        if re.search(pat, low):
+            return kind
+    return "other"
+
+
+def _amc_from_name(name: str) -> str:
+    words = name.split()
+    return " ".join(words[:2]) if len(words) >= 2 else name
 
 
 # ---------------------------------------------------------------- history
