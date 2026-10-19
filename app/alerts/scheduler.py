@@ -92,12 +92,16 @@ def next_run_times() -> dict[str, datetime | None]:
 
 
 # ---------------------------------------------------------------- evaluation
-def price_triggered(entry: SpotlightEntry, ltp: float) -> bool:
+def price_triggered(entry: SpotlightEntry, ltp: float, day_high: float | None = None, day_low: float | None = None) -> bool:
+    """True when the cutoff was reached. During a session the day's high/low are checked too,
+    so a touch that happened between two polls is still caught."""
     if entry.cutoff_price is None:
         return False
     if entry.cutoff_direction == "below":
-        return ltp <= entry.cutoff_price
-    return ltp >= entry.cutoff_price
+        lowest = min(ltp, day_low) if day_low is not None else ltp
+        return lowest <= entry.cutoff_price
+    highest = max(ltp, day_high) if day_high is not None else ltp
+    return highest >= entry.cutoff_price
 
 
 def news_catalyst(analysis) -> tuple[str | None, list[dict]]:
@@ -146,7 +150,9 @@ async def poll_spotlight(entry_id: int, force: bool = False) -> dict:
         entry.last_error = None
 
         triggers: list[tuple[str, str, dict]] = []
-        if price_triggered(entry, analysis.quote.ltp):
+        q = analysis.quote
+        intraday = q.market_open and not q.is_stale
+        if price_triggered(entry, q.ltp, q.day_high if intraday else None, q.day_low if intraday else None):
             last = entry.last_price_alert_at
             if last is not None and last.tzinfo is None:
                 last = last.replace(tzinfo=timezone.utc)

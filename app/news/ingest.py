@@ -88,16 +88,22 @@ def filter_recent(articles: list[NewsArticle], days: int = LOOKBACK_DAYS) -> lis
     return [a for a in articles if (a.published_at if a.published_at.tzinfo else a.published_at.replace(tzinfo=timezone.utc)) >= cutoff]
 
 
-def fetch_live(symbol: str, company_name: str) -> list[NewsArticle]:
-    base = symbol.split(".")[0]
-    query = f'"{company_name}" OR {base} stock when:{LOOKBACK_DAYS}d'
-    urls = [GOOGLE_NEWS_RSS.format(q=quote_plus(query)), YAHOO_RSS.format(symbol=quote_plus(symbol))]
+def fetch_query(query: str, days: int = LOOKBACK_DAYS, extra_urls: list[str] | None = None) -> list[NewsArticle]:
+    """Fetch Google News RSS for an arbitrary query (plus optional extra feeds); never raises."""
+    urls = [GOOGLE_NEWS_RSS.format(q=quote_plus(f"{query} when:{days}d"))] + list(extra_urls or [])
     articles: list[NewsArticle] = []
     for url in urls:
         try:
             articles.extend(_parse_feed(url))
         except Exception as exc:  # network failures are non-fatal
             log.warning("news feed failed (%s): %s", url, exc)
+    return articles
+
+
+def fetch_live(symbol: str, company_name: str) -> list[NewsArticle]:
+    base = symbol.split(".")[0]
+    articles = fetch_query(f'"{company_name}" OR {base} stock', LOOKBACK_DAYS,
+                           extra_urls=[YAHOO_RSS.format(symbol=quote_plus(symbol))])
     return filter_recent(dedupe(articles))
 
 

@@ -21,6 +21,7 @@ with a toggleable dark mode.
 | News & sentiment matrix | Google News RSS + Yahoo Finance RSS for the past 7 days, deduplicated, cached in SQLite. Each article is classified (category, sentiment, impact -1..+1, reasoning) by Claude via structured output (Pydantic), with a keyword heuristic fallback when no API key is set. Aggregated into a recency-weighted score and momentum bias. |
 | Cutoff probability | `P(touch) = 2 * [1 - Phi(|ln(P_target/P_0)| / (sigma * sqrt(T)))]` using 1-year realised volatility, with the assumptions stated on screen. |
 | Spotlight watchlist | APScheduler (SQLite job store) polls each ticker on its own interval during market hours. HTML email alerts (aiosmtplib) when a cutoff is hit or a news item scores beyond +/-0.7, with news context and a technical summary. |
+| IPO intelligence | Upcoming & ongoing issues from NSE (price band, lot, size, fresh vs OFS, subscription) with grey-market premium, DRHP metrics, a structured strengths / risks / sentiment read (Claude, with a rules fallback) and a 14-day news feed; recently listed IPOs with listing-day and till-date returns. |
 | Portfolio health | Holdings with buy price / quantity / date. Net P&L, day change, value-weighted sentiment exposure, and flags for negative catalysts, RSI extremes and 200 EMA breaks. |
 
 ## Quick start
@@ -74,6 +75,31 @@ classifier is used, and alert emails are written to `data/outbox/*.html`.
 | `MARKET_HOLIDAYS` | Comma-separated `YYYY-MM-DD` dates on which polling is skipped. |
 | `QUOTE_CACHE_SECONDS`, `HISTORY_CACHE_SECONDS`, `NEWS_CACHE_SECONDS` | Cache TTLs (defaults 60 / 900 / 1800). |
 | `DATA_DIR` | Location of `snitchofdalal.db` (app data) and `jobs.db` (scheduler). |
+
+## IPO data sources and overrides
+
+- Issue calendar and past listings come from NSE's public JSON endpoints through the
+  `nsemine` session helper. They are undocumented and may change; failures degrade to
+  an empty list rather than an error.
+- Grey market premium is parsed from a public GMP page (`IPO_GMP_URL`, empty to disable).
+  It is unofficial and shown as such.
+- DRHP metrics (revenue growth, PAT margin, D/E, P/E vs industry, ROE, ROCE) have no
+  public API, so they are supplied through `ipo_overrides.json` in the data folder
+  (`docker cp` it into `snitchofdalal:/data/`), keyed by symbol or company name.
+  The same file can correct GMP or lot size, and add listings NSE does not return:
+
+```json
+{
+  "ABCD": {"gmp": 45, "lot_size": 150, "fresh_issue_cr": 500, "ofs_cr": 200,
+           "fundamentals": {"revenue_growth_pct": 22, "pat_margin_pct": 11, "debt_equity": 0.3,
+                            "pe": 28, "industry_pe": 24, "roe_pct": 18, "roce_pct": 21,
+                            "notes": "Order book 2x revenue; top customer 30% of sales"}},
+  "WXYZ": {"listed": true, "symbol": "WXYZ.NS", "company": "WXYZ Ltd", "issue_price": 210, "listing_date": "2026-10-07"}
+}
+```
+
+- Lists are cached for an hour and assessments for 12 hours; "Refresh now" on the page
+  forces a refetch. Offline mode shows three demo issues and three demo listings.
 
 ## Restricting the app to approved devices
 
@@ -133,6 +159,7 @@ open the app. Set `BIND_HOST=0.0.0.0` to allow other devices on the same network
 | `POST /api/probability` | `{query, target_price, horizon_days}` -> touch probability and assumptions. |
 | `GET/POST /api/spotlight`, `PATCH/DELETE /api/spotlight/{id}`, `POST /api/spotlight/{id}/poll` | Watchlist CRUD and on-demand poll. |
 | `GET /api/alerts` | Alert delivery log. |
+| `GET /api/ipo/upcoming`, `GET /api/ipo/listed` | IPO cards with assessment and news; recent listings with returns (`?force=true` refetches). |
 | `GET/POST /api/portfolio`, `DELETE /api/portfolio/{id}` | Holdings and portfolio health. |
 | `GET /api/health` | Service status, market state, scheduler state. |
 

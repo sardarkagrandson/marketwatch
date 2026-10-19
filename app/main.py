@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app import licensing, services
+from app.ipo import service as ipo_service
 from app.alerts import scheduler as sched
 from app.config import get_settings
 from app.db import get_db, init_db, session_scope
@@ -295,6 +296,42 @@ def portfolio_delete(holding_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Holding not found")
     db.delete(h)
     return RedirectResponse("/portfolio?msg=Holding removed", status_code=303)
+
+
+# ================================================================= IPO
+@app.get("/ipo", response_class=HTMLResponse)
+def ipo_page(request: Request):
+    from datetime import datetime as _dt
+
+    cards = ipo_service.upcoming_cards()
+    listed = ipo_service.recently_listed()
+    return templates.TemplateResponse(
+        request, "ipo.html",
+        ctx(request, cards=cards, listed=listed, fetched_label=_dt.now().strftime("%d %b %H:%M")),
+    )
+
+
+@app.post("/ipo/refresh")
+def ipo_refresh():
+    ipo_service.upcoming_cards(force=True)
+    ipo_service.recently_listed(force=True)
+    return RedirectResponse("/ipo", status_code=303)
+
+
+@app.get("/api/ipo/upcoming")
+def api_ipo_upcoming(force: bool = False):
+    out = []
+    for c in ipo_service.upcoming_cards(force):
+        d = c.model_dump(mode="json")
+        d["listing"]["est_listing_price"] = c.listing.est_listing_price
+        d["listing"]["gmp_pct"] = c.listing.gmp_pct
+        out.append(d)
+    return out
+
+
+@app.get("/api/ipo/listed")
+def api_ipo_listed(force: bool = False):
+    return [r.model_dump(mode="json") for r in ipo_service.recently_listed(force)]
 
 
 # ================================================================= JSON API

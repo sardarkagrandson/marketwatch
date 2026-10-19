@@ -113,3 +113,21 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
     });
   });
 });
+
+// ---- Simple tabs (IPO page) ---------------------------------------------------
+(function () {
+  var btns = document.querySelectorAll(".tab-btn");
+  if (!btns.length) return;
+  function show(name) {
+    document.querySelectorAll(".tab-panel").forEach(function (p) { p.hidden = p.id !== "tab-" + name; });
+    btns.forEach(function (b) {
+      var on = b.getAttribute("data-tab") === name;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    try { history.replaceState(null, "", "#" + name); } catch (e) {}
+  }
+  btns.forEach(function (b) { b.addEventListener("click", function () { show(b.getAttribute("data-tab")); }); });
+  var initial = (location.hash || "").replace("#", "");
+  show(document.getElementById("tab-" + initial) ? initial : btns[0].getAttribute("data-tab"));
+})();

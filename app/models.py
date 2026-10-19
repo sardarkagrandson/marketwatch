@@ -97,3 +97,13 @@ class DeviceLicense(Base):
     licensee: Mapped[str] = mapped_column(String(128), default="")
     expires: Mapped[str | None] = mapped_column(String(10), nullable=True)
     activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IPOCache(Base):
+    """Generic JSON cache for IPO lists, news and assessments."""
+
+    __tablename__ = "ipo_cache"
+
+    key: Mapped[str] = mapped_column(String(96), primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
