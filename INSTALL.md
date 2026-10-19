@@ -81,8 +81,11 @@ volume can be removed with `docker volume rm marketwatch_marketwatch-data`.
 
 ## Optional settings (the `.env` file)
 
-The start script creates a file called `.env` next to it. Open it in Notepad
-or TextEdit to switch features on:
+The start script creates a file called `.env` next to it. Its name starts with a
+dot, so it is hidden: press Ctrl+H in the Ubuntu file manager, Cmd+Shift+. in
+Finder, or run `ls -a` in a terminal to see it. Open it in a text editor to switch
+features on. If whoever gave you the app already configured email or other
+settings, you do not need to change anything here:
 
 | Setting | What it does |
 |---|---|

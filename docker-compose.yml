@@ -10,7 +10,11 @@ services:
     ports:
       # Bound to this computer only by default. Set BIND_HOST=0.0.0.0 in .env to allow other devices on your network.
       - "${BIND_HOST:-127.0.0.1}:${APP_PORT:-8000}:8000"
+    # Layered settings: .env.example holds the operator's defaults for every installation
+    # (shared email sender, licence public key, AI key); .env holds this machine's overrides.
     env_file:
+      - path: .env.example
+        required: false
       - path: .env
         required: false
     environment:

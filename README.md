@@ -101,6 +101,16 @@ classifier is used, and alert emails are written to `data/outbox/*.html`.
 - Lists are cached for an hour and assessments for 12 hours; "Refresh now" on the page
   forces a refetch. Offline mode shows three demo issues and three demo listings.
 
+## Settings for all users versus one machine
+
+Settings are read in two layers. `.env.example` is committed and distributed with the
+app, so anything you put there (the shared email sender, `LICENSE_PUBLIC_KEY`, an AI
+key) applies to every installation with no user action. `.env` is created per machine
+by the start script, ignored by git, and overrides individual lines. Both files are
+hidden dotfiles in the project root (`ls -a`). If you place credentials in
+`.env.example`, keep the repository private and prefer a sending service whose key can
+be rotated, such as Brevo or SendGrid, over a personal mailbox password.
+
 ## Restricting the app to approved devices
 
 Licensing is off until you set `LICENSE_PUBLIC_KEY`. To turn it on:
