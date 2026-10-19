@@ -71,6 +71,12 @@ def test_parse_amfi_eight_column_layout():
     assert c.kind == "large_cap" and c.nav == 1245.6789 and c.direct and c.growth and c.amc == "HDFC Mutual Fund"
 
 
+def test_parse_amfi_mixed_rows_under_new_header():
+    text = SAMPLE_2026 + "\n119568;INF209K01VA3;INF209K01VB1;Aditya Birla Sun Life Liquid Fund - Direct Plan - Growth;412.1234;17-Oct-2026\n"
+    rows = sources.parse_amfi(text)
+    assert len(rows) == 4 and rows[-1].nav == 412.1234 and rows[-1].direct and rows[-1].growth and rows[-1].kind == "large_cap"
+
+
 def test_every_kind_has_guide_content():
     for k in KINDS:
         assert k.use_case and k.description and k.horizon and k.risk

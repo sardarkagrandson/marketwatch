@@ -93,24 +93,31 @@ def parse_amfi(text: str) -> list[Scheme]:
             }
             plan_col, option_col = find("plan"), find("option")
             continue
-        if len(parts) <= max(cols.values()) or not parts[0].isdigit():
+        if not parts[0].isdigit() or len(parts) < 6:
             continue  # malformed
-        code = parts[cols["code"]]
-        name = re.sub(r"\s+", " ", parts[cols["name"]])
-        nav_s, date_s = parts[cols["nav"]], parts[cols["date"]]
+        # Rows do not always match the header: pick the mapping by the row's own width.
+        if len(parts) >= 8:
+            rc = cols if max(cols.values()) < len(parts) else {"code": 0, "isin": 1, "name": 3, "nav": 6, "date": 7}
+            pc, oc = (plan_col, option_col) if plan_col is not None else (4, 5)
+        else:
+            rc = {"code": 0, "isin": 1, "name": 3, "nav": 4, "date": 5}
+            pc, oc = None, None
+        code = parts[rc["code"]]
+        name = re.sub(r"\s+", " ", parts[rc["name"]])
+        nav_s, date_s = parts[rc["nav"]], parts[rc["date"]]
         try:
             nav = float(nav_s.replace(",", "")) if nav_s not in ("", "N.A.", "-") else None
         except ValueError:
             nav = None
         direct, growth = _plan_flags(name)
-        if plan_col is not None and plan_col < len(parts) and parts[plan_col]:
-            direct = parts[plan_col].strip().lower().startswith("direct")
-        if option_col is not None and option_col < len(parts) and parts[option_col]:
-            opt = parts[option_col].strip().lower()
-            growth = opt.startswith("growth") or opt.startswith("cumulative")
+        if pc is not None and pc < len(parts) and parts[pc]:
+            direct = "direct" in parts[pc].strip().lower()
+        if oc is not None and oc < len(parts) and parts[oc]:
+            opt = parts[oc].strip().lower()
+            growth = ("growth" in opt or "cumulative" in opt) and "idcw" not in opt and "dividend" not in opt
         schemes.append(Scheme(
             code=code, name=name, amc=amc, amfi_category=category, kind=classify(category, name),
-            nav=nav, nav_date=_date(date_s), isin=(parts[cols["isin"]] or None) if cols["isin"] < len(parts) else None,
+            nav=nav, nav_date=_date(date_s), isin=(parts[rc["isin"]] or None) if rc["isin"] < len(parts) else None,
             direct=direct, growth=growth,
         ))
     return schemes
@@ -132,9 +139,17 @@ def fetch_amfi() -> list[Scheme]:
             attempt.update(status=resp.status_code, bytes=len(resp.content), final_url=str(resp.url))
             resp.raise_for_status()
             text = resp.text
-            attempt["first_lines"] = text.splitlines()[:6]
+            lines = text.splitlines()
+            attempt["first_lines"] = lines[:6]
+            attempt["sample_data_rows"] = [l for l in lines if l.count(";") >= 5 and l.strip()[:1].isdigit()][:4]
             schemes = parse_amfi(text)
             attempt["parsed"] = len(schemes)
+            attempt["with_nav"] = sum(1 for x in schemes if x.nav is not None)
+            attempt["direct"] = sum(1 for x in schemes if x.direct)
+            attempt["growth"] = sum(1 for x in schemes if x.growth)
+            attempt["direct_growth"] = sum(1 for x in schemes if x.direct and x.growth)
+            attempt["kinds"] = {k: sum(1 for x in schemes if x.kind == k) for k in sorted({x.kind for x in schemes})}
+            attempt["sample_parsed"] = [x.model_dump(mode="json") for x in schemes[:2]]
             if len(schemes) < 100:
                 raise RuntimeError(f"AMFI file looked wrong ({len(schemes)} schemes parsed)")
             _diag["source"] = "amfi"
