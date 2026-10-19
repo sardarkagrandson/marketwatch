@@ -61,7 +61,7 @@
       {{ m.pill("EMA trend: " ~ t.ema_trend, "bullish" if t.ema_trend == "bullish" else "bearish" if t.ema_trend == "bearish" else "neutral") }}
     </div>
     <div class="mt-4">
-      <div class="flex justify-between text-sm"><span class="text-ink-500">RSI (14)</span><span class="num font-medium text-ink-900 dark:text-white">{{ t.rsi_14 if t.rsi_14 is not none else "-" }} <span class="text-xs text-ink-500">{{ t.rsi_state }}</span></span></div>
+      <div class="flex justify-between text-sm"><span class="text-ink-500">RSI (14)</span><span class="num font-medium text-ink-900 dark:text-white">{{ "%.1f" | format(t.rsi_14) if t.rsi_14 is not none else "-" }} <span class="text-xs text-ink-500">{{ t.rsi_state }}</span></span></div>
       <div class="meter mt-1"><span style="width: {{ t.rsi_14 or 0 }}%; background: {% if t.rsi_state == 'overbought' %}#EB5B5B{% elif t.rsi_state == 'oversold' %}#5367FF{% else %}#00D09C{% endif %}"></span></div>
       <div class="flex justify-between text-[10px] text-ink-500 mt-0.5"><span>0</span><span>30</span><span>70</span><span>100</span></div>
     </div>
@@ -69,7 +69,7 @@
       {% for label, val in [("EMA 20", t.ema_20), ("EMA 50", t.ema_50), ("EMA 200", t.ema_200), ("ATR 20", t.atr_20)] %}
       <div class="flex justify-between"><dt class="text-ink-500">{{ label }}</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ "{:,.2f}".format(val) if val is not none else "-" }}</dd></div>
       {% endfor %}
-      <div class="flex justify-between"><dt class="text-ink-500">ATR %</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ t.atr_pct ~ "%" if t.atr_pct is not none else "-" }}</dd></div>
+      <div class="flex justify-between"><dt class="text-ink-500">ATR %</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ "%.2f%%" | format(t.atr_pct) if t.atr_pct is not none else "-" }}</dd></div>
       <div class="flex justify-between"><dt class="text-ink-500">Ann. volatility</dt><dd class="num font-medium text-ink-900 dark:text-white">{{ (t.annualized_volatility * 100) | round(1) ~ "%" if t.annualized_volatility else "-" }}</dd></div>
     </dl>
     <div class="mt-4 grid sm:grid-cols-2 gap-3 text-sm">

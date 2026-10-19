@@ -7,6 +7,9 @@ __pycache__
 .pytest_cache
 data
 tests
+tailwind.config.js
+license_private.pem
+issued_licenses.csv
 .env
 *.md
 docs
@@ -14,3 +17,4 @@ start.sh
 start.bat
 stop.sh
 stop.bat
+tailwind.src.css

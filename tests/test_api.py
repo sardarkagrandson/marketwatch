@@ -55,3 +55,19 @@ def test_form_flows(client):
     assert r.status_code == 303 and "Added" in r.headers["location"]
     r = client.post("/portfolio/add", data={"query": "ITC", "buy_price": "400", "quantity": "10", "buy_date": "2025-01-01"}, follow_redirects=False)
     assert r.status_code == 303 and "added" in r.headers["location"]
+
+
+def test_home_overview_and_suggest_markup(client):
+    html = client.get("/").text
+    assert "NIFTY 50" in html and "Most watched" in html
+    assert "Reliance Industries" in html          # company name, not the bare symbol
+    assert html.count("data-suggest") >= 2 and "tailwind.css?v=" in html
+    assert "cdn.tailwindcss.com" not in html
+    assert "Keyword news scoring" in html and "Device licensing: off" in html
+
+
+def test_stock_page_rounds_indicators(client):
+    html = client.get("/stock/HDFC%20Bank").text
+    import re
+    rsi = re.search(r'RSI \(14\)</span><span class="num[^"]*">([0-9.]+)', html)
+    assert rsi and len(rsi.group(1).split(".")[-1]) <= 1

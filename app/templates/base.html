@@ -17,26 +17,8 @@
       } catch (e) {}
     })();
   </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"], mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"] },
-          colors: {
-            mint: { DEFAULT: "#00D09C", 50: "#E6FAF5", 600: "#00B386" },
-            crimson: { DEFAULT: "#EB5B5B", 50: "#FDEEEE", 600: "#D64545" },
-            indigo: { DEFAULT: "#5367FF", 50: "#EEF0FF" },
-            ink: { 900: "#1E222D", 700: "#44475B", 500: "#7C7E8C", 300: "#B8BAC4" },
-            surface: { DEFAULT: "#FFFFFF", 1: "#F8F9FA", line: "#EAECF0", dark: "#121212", card: "#1E222D", darkline: "#2B303D" }
-          },
-          boxShadow: { card: "0 1px 2px rgba(30,34,45,0.04), 0 4px 16px rgba(30,34,45,0.06)" }
-        }
-      }
-    };
-  </script>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/tailwind.css?v={{ asset_version }}">
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version }}">
 </head>
 <body class="h-full bg-surface-1 text-ink-700 dark:bg-surface-dark dark:text-slate-200 font-sans antialiased">
   <header class="bg-surface dark:bg-surface-card border-b border-surface-line dark:border-surface-darkline sticky top-0 z-20">
@@ -79,7 +61,7 @@
       <span>{{ market.ist_time }}</span>
       {% if not market.open and market.next_open %}<span>Next open: {{ market.next_open }} ({{ market.next_open_in }})</span>{% endif %}
       {% if offline %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20">Offline demo data</span>{% endif %}
-      {% if not llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card">Heuristic sentiment (no LLM key)</span>{% endif %}
+      {% if llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20" title="News is classified by Claude using structured output">AI news scoring</span>{% else %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card" title="No ANTHROPIC_API_KEY set: headlines are scored with a built-in financial keyword dictionary. Add a key in .env to enable AI classification.">Keyword news scoring</span>{% endif %}
     </div>
     {% if msg %}
     <div class="rounded-2xl px-4 py-3 text-sm {% if msg.startswith('Error') %}bg-crimson-50 text-crimson-600 dark:bg-crimson/15{% else %}bg-mint-50 text-mint-600 dark:bg-mint/15{% endif %}">{{ msg }}</div>
@@ -91,8 +73,8 @@
     <p class="font-medium text-ink-700 dark:text-slate-300 mb-1">Market risk disclaimer</p>
     <p>{{ disclaimer }}</p>
     <p class="mt-2">Prices: {% if quote_source == "offline" %}synthetic demo data{% elif quote_source == "yfinance" %}Yahoo Finance (may be delayed up to 15 minutes){% else %}official NSE quotes during market hours, with Yahoo Finance as fallback (which may be delayed){% endif %}. News: Google News and Yahoo Finance RSS, cached for 30 minutes. NSE trades 09:15-15:30 IST on trading days; outside those hours the last close is shown and the next open time appears above.</p>
-    {% if license %}<p class="mt-2">Licensed to {{ license.name }} on device {{ license.device_id }}{% if license.expires %} until {{ license.expires }}{% endif %}.</p>{% endif %}
+    {% if license %}<p class="mt-2">Licensed to {{ license.name }} on device {{ license.device_id }}{% if license.expires %} until {{ license.expires }}{% endif %}.</p>{% else %}<p class="mt-2">Device licensing: off (open access). Set LICENSE_PUBLIC_KEY to restrict this app to approved devices. Device ID of this installation: <span class="num">{{ device_id }}</span></p>{% endif %}
   </footer>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v={{ asset_version }}"></script>
 </body>
 </html>

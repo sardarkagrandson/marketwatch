@@ -18,7 +18,7 @@ from app import licensing, services
 from app.alerts import scheduler as sched
 from app.config import get_settings
 from app.db import get_db, init_db, session_scope
-from app.market.data import market_status
+from app.market.data import market_overview, market_status
 from app.market.tickers import known_symbols, resolve_ticker, suggest
 from app.models import AlertLog, Holding, SpotlightEntry
 from app.portfolio.health import portfolio_health
@@ -29,6 +29,19 @@ log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _asset_version() -> str:
+    """Short hash of the static files so browsers fetch fresh CSS/JS after an update."""
+    import hashlib
+
+    h = hashlib.sha1()
+    for f in sorted((BASE_DIR / "static").glob("*")):
+        h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+ASSET_VERSION = _asset_version()
 
 
 @asynccontextmanager
@@ -74,6 +87,8 @@ def ctx(request: Request, **kwargs) -> dict:
         "disclaimer": services.DISCLAIMER,
         "quote_source": "offline" if s.offline_mode else s.quote_source,
         "license": licensing.license_status() if licensing.licensing_required() else None,
+        "device_id": licensing.get_or_create_device_id(),
+        "asset_version": ASSET_VERSION,
         **kwargs,
     }
 
@@ -167,8 +182,11 @@ def api_license_deactivate():
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, db: Session = Depends(get_db)):
     spotlight = db.query(SpotlightEntry).order_by(SpotlightEntry.created_at.desc()).limit(6).all()
-    popular = [s for s in known_symbols()[:12]]
-    return templates.TemplateResponse(request, "index.html", ctx(request, spotlight=spotlight, popular=popular))
+    overview = market_overview()
+    return templates.TemplateResponse(
+        request, "index.html",
+        ctx(request, spotlight=spotlight, overview=overview, quick=known_symbols()[:16]),
+    )
 
 
 @app.get("/stock", response_class=HTMLResponse)

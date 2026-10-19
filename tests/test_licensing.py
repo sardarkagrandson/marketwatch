@@ -81,7 +81,6 @@ def test_cli_roundtrip(tmp_path, monkeypatch, capsys):
     import tools.license_admin as cli
 
     key = tmp_path / "k.pem"
-    monkeypatch.setattr(cli, "LEDGER", tmp_path / "ledger.csv")
     monkeypatch.setattr("sys.argv", ["x", "keygen", "--out", str(key)])
     cli.main()
     pub = [l for l in capsys.readouterr().out.splitlines() if l.startswith("LICENSE_PUBLIC_KEY=")][0].split("=", 1)[1]
@@ -89,4 +88,4 @@ def test_cli_roundtrip(tmp_path, monkeypatch, capsys):
     cli.main()
     tok = [l for l in capsys.readouterr().out.splitlines() if l.startswith("SOD1.")][0]
     assert licensing.verify_token(tok, pub, "1111-2222-3333-4444").name == "Test User"
-    assert (tmp_path / "ledger.csv").read_text().count("\n") == 2
+    assert (tmp_path / "issued_licenses.csv").read_text().count("\n") == 2

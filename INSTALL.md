@@ -108,6 +108,8 @@ docker cp snitchofdalal:/data/outbox ./alerts
 |---|---|
 | "Docker is not installed" or "not running" | Open Docker Desktop and wait for the green status, then retry. |
 | Browser shows "connection refused" | Wait 30 seconds and refresh; the first start is slow. |
+| After an update the page looks or behaves like the old version | Hard-refresh once: Ctrl+F5 on Windows, Cmd+Shift+R on Mac. |
+| Status bar says "Keyword news scoring" | Normal without an AI key. News is scored with a built-in keyword dictionary. Add `ANTHROPIC_API_KEY` in `.env` to use AI scoring. |
 | Port 8000 is already used by another program | Add a line `APP_PORT=8010` to `.env` and start again; then open http://localhost:8010. |
 | Want to open it from your phone or another PC on the same Wi-Fi | Add `BIND_HOST=0.0.0.0` to `.env`, start again, and use your computer's IP address, e.g. http://192.168.1.20:8000. |
 | "Activate this device" appears again | Your licence has expired or the app's data was reset. Send us the new Device ID for a fresh key. |

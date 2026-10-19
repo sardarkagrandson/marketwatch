@@ -16,6 +16,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY app ./app
+COPY tools ./tools
 COPY pyproject.toml .
 
 # Run as an unprivileged user; /data is the persistent volume for SQLite + outbox.

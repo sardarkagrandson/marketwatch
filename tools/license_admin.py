@@ -4,7 +4,11 @@
   python tools/license_admin.py keygen                      # once; prints LICENSE_PUBLIC_KEY
   python tools/license_admin.py issue --device-id AB12-... --name "Ravi K" --days 365
   python tools/license_admin.py inspect <token>
-  python tools/license_admin.py list                        # issued_licenses.csv
+  python tools/license_admin.py list                        # issued_licenses.csv next to the key
+
+Inside Docker (no Python needed on the host), keep the key in the data volume:
+  docker compose exec snitchofdalal python tools/license_admin.py keygen --out /data/license_private.pem
+  docker compose exec snitchofdalal python tools/license_admin.py issue --key /data/license_private.pem --device-id ... --name ...
 
 Keep license_private.pem secret and out of git (it is in .gitignore).
 """
@@ -23,7 +27,10 @@ from app.licensing import decode_token, generate_keypair, issue_token, load_priv
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 
 DEFAULT_KEY = ROOT / "license_private.pem"
-LEDGER = ROOT / "issued_licenses.csv"
+
+
+def ledger_for(key_path: str | Path) -> Path:
+    return Path(key_path).resolve().parent / "issued_licenses.csv"
 
 
 def cmd_keygen(args):
@@ -41,15 +48,16 @@ def cmd_keygen(args):
 def cmd_issue(args):
     pem = Path(args.key).read_text()
     token = issue_token(pem, args.device_id, args.name, None if args.days == 0 else args.days, args.plan)
-    new = not LEDGER.exists()
-    with LEDGER.open("a", newline="") as fh:
+    ledger = ledger_for(args.key)
+    new = not ledger.exists()
+    with ledger.open("a", newline="") as fh:
         w = csv.writer(fh)
         if new:
             w.writerow(["issued_at", "device_id", "name", "days", "plan", "token"])
         w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), args.device_id.upper(), args.name, args.days, args.plan, token])
     print(f"Licence for {args.name} on device {args.device_id.upper()} ({'no expiry' if args.days == 0 else f'{args.days} days'}):\n")
     print(token)
-    print(f"\nRecorded in {LEDGER}")
+    print(f"\nRecorded in {ledger}")
 
 
 def cmd_inspect(args):
@@ -69,10 +77,11 @@ def cmd_inspect(args):
 
 
 def cmd_list(args):
-    if not LEDGER.exists():
+    ledger = ledger_for(args.key)
+    if not ledger.exists():
         print("No licences issued yet.")
         return
-    with LEDGER.open() as fh:
+    with ledger.open() as fh:
         for row in csv.DictReader(fh):
             print(f"{row['issued_at']}  {row['device_id']}  {row['name']:24} {row['days']:>5}d  {row['plan']}")
 
@@ -86,7 +95,7 @@ def main():
     i.add_argument("--days", type=int, default=365, help="0 = never expires"); i.add_argument("--plan", default="standard")
     i.add_argument("--key", default=str(DEFAULT_KEY))
     n = sub.add_parser("inspect"); n.add_argument("token"); n.add_argument("--key", default=str(DEFAULT_KEY))
-    sub.add_parser("list")
+    l = sub.add_parser("list"); l.add_argument("--key", default=str(DEFAULT_KEY))
     args = p.parse_args()
     {"keygen": cmd_keygen, "issue": cmd_issue, "inspect": cmd_inspect, "list": cmd_list}[args.cmd](args)
 

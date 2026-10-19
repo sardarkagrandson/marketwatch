@@ -17,6 +17,8 @@ anthropic>=1.0
 cryptography>=42
 python-dotenv>=1.0
 pytest>=8.0
+# Dev only: rebuild app/static/tailwind.css after template changes (python tools/build_css.py)
+# pytailwindcss>=0.2
 # Optional: `ta` provides reference implementations of the same indicators.
 # The app computes RSI/EMA/ATR natively with pandas so it is not required.
 # ta>=0.11 ; python_version < "3.13"

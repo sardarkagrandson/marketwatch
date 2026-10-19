@@ -39,3 +39,14 @@
   {% if note %}<p class="text-xs text-ink-500 mt-1">{{ note }}</p>{% endif %}
 </div>
 {%- endmacro %}
+
+{% macro monogram(name, size="w-10 h-10 text-sm") -%}
+{%- set palette = ["bg-mint-50 text-mint-600 dark:bg-mint/15", "bg-indigo-50 text-indigo dark:bg-indigo/20", "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300", "bg-crimson-50 text-crimson-600 dark:bg-crimson/15", "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300", "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"] -%}
+{%- set words = name.replace("&", " ").split() -%}
+{%- set initials = (words[0][:1] ~ (words[1][:1] if words|length > 1 else "")) | upper -%}
+<span class="{{ size }} rounded-xl inline-flex items-center justify-center font-semibold shrink-0 {{ palette[(name|length) % palette|length] }}">{{ initials }}</span>
+{%- endmacro %}
+
+{% macro spark(points, up) -%}
+<svg class="w-24 h-8" data-sparkline='{{ points | tojson }}' data-up="{{ 'true' if up else 'false' }}" aria-hidden="true"></svg>
+{%- endmacro %}

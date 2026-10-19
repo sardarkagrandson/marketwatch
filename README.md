@@ -84,6 +84,17 @@ python tools/license_admin.py keygen            # creates license_private.pem, p
 # paste LICENSE_PUBLIC_KEY=... into .env.example (so every installation gets it), rebuild the image
 ```
 
+No Python on your machine? The tool is inside the image. Keep the key in the data volume:
+
+```bash
+docker compose exec snitchofdalal python tools/license_admin.py keygen --out /data/license_private.pem
+docker compose exec snitchofdalal python tools/license_admin.py issue --key /data/license_private.pem --device-id 7F3A-91C2-0B5E-44D1 --name "Ravi K" --days 365
+docker compose exec snitchofdalal python tools/license_admin.py list --key /data/license_private.pem
+```
+
+Until `LICENSE_PUBLIC_KEY` is set the app runs in open access and the footer shows
+"Device licensing: off" together with the installation's Device ID.
+
 Each installation then shows a **Device ID** (for example `7F3A-91C2-0B5E-44D1`) on its
 activation screen. The user sends it to you, and you issue a key:
 
@@ -163,5 +174,10 @@ keys are required.
 - The `ta` library is listed as optional: the same RSI / EMA / ATR definitions are
   implemented in `app/market/indicators.py` so the app runs on Python 3.13 where
   `ta` currently fails to build.
-- The UI loads Tailwind and Google Fonts from CDNs; `app/static/app.css` carries
-  the core design tokens so pages remain usable if those are blocked.
+- The stylesheet is compiled and shipped (`app/static/tailwind.css`), so the UI needs
+  no CDN and works offline. After editing templates run `python tools/build_css.py`
+  (`pip install pytailwindcss`) and commit the result. Only the Inter / JetBrains Mono
+  web fonts come from Google Fonts, with system fallbacks.
+- "Keyword news scoring" in the status bar means no `ANTHROPIC_API_KEY` is set, so
+  headlines are scored with the built-in financial keyword dictionary. Add a key to
+  switch to Claude's structured classification; the badge changes to "AI news scoring".

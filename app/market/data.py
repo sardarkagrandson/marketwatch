@@ -302,3 +302,50 @@ def set_engine(engine: MarketDataEngine | None) -> None:
 
 def sparkline_points(history: pd.DataFrame, n: int = 60) -> list[float]:
     return [round(float(v), 2) for v in history["Close"].tail(n).tolist()]
+
+
+# ---------------------------------------------------------------- market overview (home page)
+INDICES = [
+    ("^NSEI", "NIFTY 50"),
+    ("^BSESN", "SENSEX"),
+    ("^NSEBANK", "NIFTY Bank"),
+    ("^CNXIT", "NIFTY IT"),
+]
+POPULAR = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "TATAMOTORS.NS", "SBIN.NS", "BHARTIARTL.NS"]
+
+
+def _quote_or_none(symbol: str, name: str | None = None) -> Quote | None:
+    try:
+        engine = get_engine()
+        hist = engine.history(symbol, "6mo")
+        key = f"quote:{engine.provider.name}:{symbol}"
+        ttl = get_settings().quote_cache_seconds if is_market_open() else get_settings().history_cache_seconds
+        q = _cache.get(key, ttl)
+        if q is None:
+            if isinstance(engine.provider, OfflineProvider):
+                from app.market.tickers import resolve_ticker
+
+                q = build_quote(symbol, name or resolve_ticker(symbol, allow_search=False).name, hist, {}, source="offline")
+            else:
+                q = engine.provider.quote(symbol, hist)
+                if name:
+                    q.name = name
+            _cache.set(key, q)
+        q.sparkline = sparkline_points(hist, 30)  # type: ignore[attr-defined]
+        return q
+    except Exception as exc:
+        log.debug("overview quote failed for %s: %s", symbol, exc)
+        return None
+
+
+def market_overview(timeout: float = 8.0) -> dict:
+    """Index strip + popular stock cards for the home page; fetched concurrently, best effort."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        idx_f = {pool.submit(_quote_or_none, sym, name): (sym, name) for sym, name in INDICES}
+        pop_f = {pool.submit(_quote_or_none, sym): sym for sym in POPULAR}
+        wait(list(idx_f) + list(pop_f), timeout=timeout)
+    indices = [f.result() for f in idx_f if f.done() and f.result() is not None]
+    popular = [f.result() for f in pop_f if f.done() and f.result() is not None]
+    return {"indices": indices, "popular": popular}

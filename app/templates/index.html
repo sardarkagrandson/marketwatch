@@ -1,40 +1,108 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
 {% block content %}
-<section class="card p-8 md:p-10">
-  <h1 class="text-2xl md:text-3xl font-semibold text-ink-900 dark:text-white">Indian market sentiment &amp; technical intelligence</h1>
-  <p class="mt-2 text-ink-500 max-w-2xl">Resolve any NSE / BSE company, read a structured news-sentiment matrix, check technical setups and estimate the statistical odds of a price reaching your cutoff.</p>
-  <form action="/stock" method="get" class="mt-6 flex flex-col sm:flex-row gap-3 max-w-2xl">
-    <div class="relative flex-1"><input name="q" required data-suggest data-submit="1" placeholder="Company name or symbol, e.g. Reliance, TATAMOTORS.NS"
-           class="w-full h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-mint/40"></div>
-    <button class="btn-primary h-12 px-6">Analyse</button>
-  </form>
-  <div class="mt-5 flex flex-wrap gap-2">
-    {% for p in popular %}
-    <a href="/stock/{{ p.symbol }}.NS" class="px-3 py-1.5 rounded-full text-sm bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline hover:border-mint">{{ p.name }}</a>
-    {% endfor %}
+
+<!-- Index strip -->
+{% if overview.indices %}
+<section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+  {% for q in overview.indices %}
+  <div class="card px-4 py-3 flex items-center justify-between gap-3">
+    <div>
+      <p class="text-xs text-ink-500">{{ q.name }}</p>
+      <p class="num text-lg font-semibold text-ink-900 dark:text-white">{{ "{:,.2f}".format(q.ltp) }}</p>
+      <p class="text-xs">{{ m.signed(q.change) }} <span class="text-ink-500">(</span>{{ m.signed(q.change_pct, "%") }}<span class="text-ink-500">)</span></p>
+    </div>
+    {{ m.spark(q.sparkline, q.change >= 0) }}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<!-- Hero -->
+<section class="card p-8 md:p-10 relative overflow-hidden">
+  <svg class="absolute -right-10 -top-10 w-72 h-72 text-mint opacity-[0.07] dark:opacity-10 pointer-events-none" viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M10 150 L50 110 L80 130 L120 70 L150 90 L190 30"/><circle cx="190" cy="30" r="8" fill="currentColor" stroke="none"/>
+  </svg>
+  <div class="relative max-w-2xl">
+    <p class="inline-flex items-center gap-2 text-xs font-medium text-mint-600 bg-mint-50 dark:bg-mint/15 px-3 py-1 rounded-full">NSE &middot; BSE &middot; news sentiment &middot; technicals</p>
+    <h1 class="mt-3 text-3xl md:text-4xl font-semibold text-ink-900 dark:text-white leading-tight">Know what Dalal Street is whispering before you act.</h1>
+    <p class="mt-3 text-ink-500">Search any listed company to see live price action, 7-day news scored for sentiment and impact, technical setups, and the statistical odds of a price reaching your target.</p>
+    <form action="/stock" method="get" class="mt-6 flex flex-col sm:flex-row gap-3">
+      <div class="relative flex-1"><input name="q" required data-suggest data-submit="1" placeholder="Try “Tata Motors”, “HDFC Bank” or “INFY.NS”"
+             class="w-full h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-mint/40"></div>
+      <button class="btn-primary h-12 px-6">Analyse</button>
+    </form>
+    <div class="mt-4 flex flex-wrap gap-2">
+      {% for p in quick[:10] %}<a href="/stock/{{ p.symbol }}.NS" class="px-3 py-1 rounded-full text-xs bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline hover:border-mint">{{ p.symbol }}</a>{% endfor %}
+    </div>
   </div>
 </section>
 
+<!-- Popular stocks -->
+{% if overview.popular %}
+<section>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-semibold text-ink-900 dark:text-white">Most watched</h2>
+    <span class="text-xs text-ink-500">{{ market.label }}</span>
+  </div>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    {% for q in overview.popular %}
+    <a href="/stock/{{ q.symbol }}" class="card p-4 hover:shadow-md">
+      <div class="flex items-center gap-3">
+        {{ m.monogram(q.name) }}
+        <div class="min-w-0">
+          <p class="font-medium text-ink-900 dark:text-white truncate">{{ q.name }}</p>
+          <p class="text-xs text-ink-500 num">{{ q.symbol.rsplit(".", 1)[0] }}</p>
+        </div>
+      </div>
+      <div class="mt-3 flex items-end justify-between gap-2">
+        <div>
+          <p class="num text-lg font-semibold text-ink-900 dark:text-white">&#8377;{{ "{:,.2f}".format(q.ltp) }}</p>
+          <p class="text-xs">{{ m.signed(q.change_pct, "%") }}</p>
+        </div>
+        {{ m.spark(q.sparkline, q.change >= 0) }}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- Feature strip -->
 <section class="grid md:grid-cols-3 gap-4">
-  <a href="/spotlight" class="card p-5 hover:shadow-md">
-    <p class="font-semibold text-ink-900 dark:text-white">Spotlight watchlist</p>
-    <p class="text-sm text-ink-500 mt-1">Poll tickers during market hours and get HTML email alerts on cutoff prices and high-impact news.</p>
-    {% if spotlight %}
-    <ul class="mt-3 space-y-1 text-sm">
-      {% for e in spotlight %}
-      <li class="flex justify-between"><span>{{ e.symbol }}</span><span class="num text-ink-500">{% if e.last_price %}&#8377;{{ "{:,.2f}".format(e.last_price) }}{% else %}&mdash;{% endif %}</span></li>
-      {% endfor %}
-    </ul>
-    {% endif %}
+  <a href="/spotlight" class="card p-5 hover:shadow-md flex gap-4">
+    <span class="w-11 h-11 rounded-2xl bg-mint-50 dark:bg-mint/15 text-mint-600 flex items-center justify-center shrink-0">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    </span>
+    <div>
+      <p class="font-semibold text-ink-900 dark:text-white">Spotlight alerts</p>
+      <p class="text-sm text-ink-500 mt-1">Watch tickers through the trading day and get an email when a price cutoff is hit or a high-impact headline lands.</p>
+      {% if spotlight %}
+      <ul class="mt-3 space-y-1 text-sm">
+        {% for e in spotlight %}
+        <li class="flex justify-between gap-3"><span class="truncate">{{ e.symbol }}</span><span class="num text-ink-500">{% if e.last_price %}&#8377;{{ "{:,.2f}".format(e.last_price) }}{% else %}&mdash;{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
   </a>
-  <a href="/portfolio" class="card p-5 hover:shadow-md">
-    <p class="font-semibold text-ink-900 dark:text-white">Portfolio health</p>
-    <p class="text-sm text-ink-500 mt-1">Net P&amp;L, day change, weighted sentiment exposure and flags for negative catalysts or technical breakdowns.</p>
+  <a href="/portfolio" class="card p-5 hover:shadow-md flex gap-4">
+    <span class="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo/20 text-indigo flex items-center justify-center shrink-0">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+    </span>
+    <div>
+      <p class="font-semibold text-ink-900 dark:text-white">Portfolio health</p>
+      <p class="text-sm text-ink-500 mt-1">Log holdings to see P&amp;L, day change, sentiment exposure and flags for negative news or technical breakdowns.</p>
+    </div>
   </a>
-  <div class="card p-5">
-    <p class="font-semibold text-ink-900 dark:text-white">Cutoff probability</p>
-    <p class="text-sm text-ink-500 mt-1">Zero-drift GBM barrier-touch estimate from one year of realised volatility. Open any stock to use it.</p>
+  <div class="card p-5 flex gap-4">
+    <span class="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
+    </span>
+    <div>
+      <p class="font-semibold text-ink-900 dark:text-white">Target probability</p>
+      <p class="text-sm text-ink-500 mt-1">Estimate the odds of a stock touching your cutoff within a horizon, from one year of realised volatility. Open any stock to use it.</p>
+    </div>
   </div>
 </section>
 {% endblock %}
