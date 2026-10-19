@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     quote_source: str = "auto"
 
     # Public grey-market-premium page to parse (unofficial, best effort). Empty disables.
-    ipo_gmp_url: str = "https://www.investorgain.com/report/live-ipo-gmp/331/"
+    ipo_gmp_url: str = "https://www.investorgain.com/report/live-ipo-gmp/331/,https://ipowatch.in/ipo-grey-market-premium-latest-ipo-gmp/"
 
     anthropic_api_key: str = ""
     sentiment_model: str = "claude-opus-5-5"

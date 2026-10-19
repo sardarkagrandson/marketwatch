@@ -95,7 +95,7 @@ def test_service_offline(db):
 def test_ipo_routes(client):
     html = client.get("/ipo").text
     assert "IPO intelligence" in html and "Vedagrid Energy Storage" in html and "Recently Listed" in html
-    assert "GMP unavailable" not in html
+    assert html.count("GMP unavailable") == 1  # footnote only; every demo card has a GMP pill
     up = client.get("/api/ipo/upcoming").json()
     assert up[0]["listing"]["est_listing_price"] and up[0]["assessment"]["sentiment"] in {"Bullish", "Neutral", "Caution"}
     assert client.get("/api/ipo/listed").json()[0]["symbol"].endswith(".NS")
@@ -109,3 +109,49 @@ def test_price_trigger_uses_intraday_range():
     e.cutoff_direction = "below"
     assert price_triggered(e, 103.0, day_high=110.0, day_low=99.5)
     assert not price_triggered(e, 103.0, day_high=110.0, day_low=101.0)
+
+
+def test_expected_dates_and_accordion(client, db):
+    from app.ipo.service import upcoming_listings
+    rows = upcoming_listings()
+    for r in rows:
+        assert r.allotment_date and r.listing_date and r.listing_date > r.close_date
+        assert r.listing_date.weekday() < 5 and r.dates_estimated
+    html = client.get("/ipo").text
+    assert html.count('<details class="card ipo-card') == 3 and "Bidding opens" in html and "(est.)" in html
+
+
+def test_listed_without_price_data(monkeypatch):
+    from app.ipo.schemas import ListedIPO
+    from app.ipo import service
+    from app.market import data
+
+    class Broken:
+        name = "broken"
+        def history(self, *a, **k): raise LookupError("No price history returned")
+        def quote(self, *a, **k): raise LookupError("nope")
+
+    data.set_engine(data.MarketDataEngine(Broken()))
+    try:
+        r = service._performance(ListedIPO(key="X", symbol="X.NS", company="X Ltd", issue_price=100))
+        assert r.ltp is None and r.chart_symbol is None and "No price data yet" in r.error
+    finally:
+        data.set_engine(None)
+
+
+def test_gmp_multiple_urls(monkeypatch):
+    import httpx
+    calls = []
+
+    class R:
+        status_code = 200
+        def __init__(self, url):
+            self.url = url
+            self.text = "<p>nothing</p>" if "first" in url else "<table><tr><th>IPO</th><th>GMP</th></tr><tr><td>Alpha Metals IPO</td><td>₹12</td></tr></table>"
+            self.content = self.text.encode()
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(httpx, "get", lambda url, **k: (calls.append(url), R(url))[1])
+    table = sources.fetch_gmp_table("https://first.example/gmp, https://second.example/gmp")
+    assert table == {"alpha metals": 12.0} and len(calls) == 2
+    assert len(sources.gmp_diagnostics()["attempts"]) == 2

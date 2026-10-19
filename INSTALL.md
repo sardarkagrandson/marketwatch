@@ -93,6 +93,29 @@ or TextEdit to switch features on:
 
 After changing `.env`, run the start script again so the new settings apply.
 
+## Turning on email alerts (Gmail example)
+
+1. In your Google account turn on 2-Step Verification, then open
+   https://myaccount.google.com/apppasswords and create an App Password named
+   "SnitchofDalal". Google shows a 16-character code once; copy it.
+2. Open the `.env` file next to the start script and set:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=abcd efgh ijkl mnop
+SMTP_FROM=you@gmail.com
+```
+
+   (spaces in the app password are fine). Other providers work the same way with
+   their own host and port; port 465 is also supported.
+3. Run the start script again so the new settings load.
+4. Open **Spotlight**, type your address next to **Send test email** and click it.
+   A green message confirms delivery; a red one shows the server's reason.
+
+Alerts are then sent from that account to the address on each Spotlight entry.
+
 ## Where are the saved alert emails?
 
 When email is not configured, each alert is saved as an HTML file inside the

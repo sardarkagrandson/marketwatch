@@ -28,83 +28,104 @@
   {% if not loading %}<div class="card p-8 text-center text-sm text-ink-500">No upcoming or ongoing IPOs were found (or NSE was unreachable). Try <form method="post" action="/ipo/refresh" class="inline"><button class="underline">refresh</button></form>.</div>{% endif %}
   {% endif %}
   {% for c in cards %}{% set l = c.listing %}
-  <article class="card p-5 md:p-6">
-    <div class="flex flex-col md:flex-row md:items-start gap-4">
-      <div class="flex items-start gap-3 flex-1 min-w-0">
-        {{ m.monogram(l.company, "w-12 h-12 text-base") }}
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="font-semibold text-ink-900 dark:text-white text-lg leading-tight">{{ l.company }}</h2>
-            {{ m.pill(l.series, "indigo" if l.series == "EQ" else "warning") }}
-            {% if l.status == "open" %}{{ m.pill("Bidding open", "bullish") }}{% elif l.status == "closed" %}{{ m.pill("Bidding closed", "neutral") }}{% else %}{{ m.pill("Upcoming", "neutral") }}{% endif %}
-            {% if c.assessment %}{{ m.pill(c.assessment.sentiment, "bullish" if c.assessment.sentiment == "Bullish" else "bearish" if c.assessment.sentiment == "Caution" else "neutral") }}{% endif %}
+  <details class="card ipo-card group" {% if loop.first %}open{% endif %}>
+    <summary class="cursor-pointer list-none p-5 md:p-6">
+      <div class="flex flex-col md:flex-row md:items-center gap-4">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          {{ m.monogram(l.company, "w-12 h-12 text-base") }}
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="font-semibold text-ink-900 dark:text-white text-lg leading-tight">{{ l.company }}</h2>
+              {{ m.pill(l.series, "indigo" if l.series == "EQ" else "warning") }}
+              {% if l.status == "open" %}{{ m.pill("Bidding open", "bullish") }}{% elif l.status == "closed" %}{{ m.pill("Bidding closed", "neutral") }}{% else %}{{ m.pill("Upcoming", "neutral") }}{% endif %}
+              {% if c.assessment %}{{ m.pill(c.assessment.sentiment, "bullish" if c.assessment.sentiment == "Bullish" else "bearish" if c.assessment.sentiment == "Caution" else "neutral") }}{% endif %}
+            </div>
+            <p class="text-xs text-ink-500 mt-1">
+              {% if l.price_low %}Band <span class="num">&#8377;{{ "%g" | format(l.price_low) }}{% if l.price_high != l.price_low %}-{{ "%g" | format(l.price_high) }}{% endif %}</span> &middot; {% endif %}
+              Bids {{ l.open_date.strftime("%d %b") if l.open_date else "TBA" }} &rarr; {{ l.close_date.strftime("%d %b") if l.close_date else "TBA" }}
+              {% if l.listing_date %} &middot; Listing {{ "~" if l.dates_estimated else "" }}{{ l.listing_date.strftime("%d %b") }}{% endif %}
+            </p>
           </div>
-          <p class="text-xs text-ink-500 mt-1">{% if l.symbol %}<span class="num">{{ l.symbol }}</span> &middot; {% endif %}Bidding {{ l.open_date.strftime("%d %b") if l.open_date else "TBA" }} &rarr; {{ l.close_date.strftime("%d %b %Y") if l.close_date else "TBA" }}</p>
+        </div>
+        <div class="flex items-center gap-4 shrink-0">
+          <div class="text-left md:text-right">
+            <p class="text-xs text-ink-500">Grey market premium</p>
+            {% if l.gmp is not none %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold text-white {% if l.gmp >= 0 %}bg-mint{% else %}bg-crimson{% endif %}">
+              <span class="num">&#8377;{{ "%+g" | format(l.gmp) }}</span>{% if l.gmp_pct is not none %}<span class="opacity-90 num">({{ "%+.1f" | format(l.gmp_pct) }}%)</span>{% endif %}
+            </span>
+            {% else %}
+            <span class="inline-flex px-3 py-1 rounded-full text-sm bg-surface-line dark:bg-surface-darkline text-ink-700 dark:text-slate-300" title="No trustworthy grey-market figure found for this issue">GMP unavailable</span>
+            {% endif %}
+          </div>
+          <span class="w-8 h-8 rounded-full border border-surface-line dark:border-surface-darkline flex items-center justify-center text-ink-500 group-open:rotate-180 transition" aria-hidden="true">&#9662;</span>
         </div>
       </div>
-      <div class="shrink-0 text-left md:text-right">
-        <p class="text-xs text-ink-500">Grey market premium</p>
-        {% if l.gmp is not none %}
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold text-white {% if l.gmp >= 0 %}bg-mint{% else %}bg-crimson{% endif %}">
-          <span class="num">&#8377;{{ "%+g" | format(l.gmp) }}</span>{% if l.gmp_pct is not none %}<span class="opacity-90 num">({{ "%+.1f" | format(l.gmp_pct) }}%)</span>{% endif %}
-        </span>
-        <p class="text-xs text-ink-500 mt-1">Est. listing &#8377;<span class="num">{{ "{:,.2f}".format(l.est_listing_price) if l.est_listing_price else "-" }}</span> &middot; {{ l.gmp_source or "unofficial" }}</p>
-        {% else %}
-        <span class="inline-flex px-3 py-1 rounded-full text-sm bg-surface-line dark:bg-surface-darkline text-ink-700 dark:text-slate-300">GMP unavailable</span>
-        {% endif %}
-      </div>
-    </div>
+    </summary>
 
-    <dl class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Price band</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.price_low %}&#8377;{{ "%g" | format(l.price_low) }}{% if l.price_high != l.price_low %} - {{ "%g" | format(l.price_high) }}{% endif %}{% else %}-{% endif %}</dd></div>
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Lot size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ l.lot_size or "-" }}{% if l.lot_size and l.price_high %} <span class="text-xs font-normal text-ink-500">(&#8377;{{ "{:,.0f}".format(l.lot_size * l.price_high) }})</span>{% endif %}</dd></div>
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Issue size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.issue_size_cr %}&#8377;{{ "{:,.0f}".format(l.issue_size_cr) }} cr{% else %}-{% endif %}{% if l.issue_shares %} <span class="text-xs font-normal text-ink-500">({{ "{:,.0f}".format(l.issue_shares) }} sh)</span>{% endif %}</dd></div>
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Fresh / OFS</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.fresh_issue_cr is not none or l.ofs_cr is not none %}{{ "{:,.0f}".format(l.fresh_issue_cr or 0) }} / {{ "{:,.0f}".format(l.ofs_cr or 0) }}{% else %}-{% endif %}</dd></div>
-      <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Subscribed</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ "%.2fx" | format(l.subscription_times) if l.subscription_times else "-" }}</dd></div>
-    </dl>
-
-    {% if l.fundamentals.has_data() %}
-    <div class="mt-3 flex flex-wrap gap-1.5 text-xs">
-      {% set f = l.fundamentals %}
-      {% if f.revenue_growth_pct is not none %}{{ m.pill("Rev growth " ~ "%.0f%%" | format(f.revenue_growth_pct), "bullish" if f.revenue_growth_pct >= 20 else "neutral") }}{% endif %}
-      {% if f.pat_margin_pct is not none %}{{ m.pill("PAT margin " ~ "%.1f%%" | format(f.pat_margin_pct), "bullish" if f.pat_margin_pct >= 10 else "neutral") }}{% endif %}
-      {% if f.debt_equity is not none %}{{ m.pill("D/E " ~ "%.2f" | format(f.debt_equity), "bearish" if f.debt_equity >= 1 else "neutral") }}{% endif %}
-      {% if f.pe is not none %}{{ m.pill("P/E " ~ "%.0f" | format(f.pe) ~ (" vs ind. " ~ "%.0f" | format(f.industry_pe) if f.industry_pe else ""), "bearish" if f.industry_pe and f.pe > f.industry_pe * 1.25 else "neutral") }}{% endif %}
-      {% if f.roe_pct is not none %}{{ m.pill("ROE " ~ "%.0f%%" | format(f.roe_pct), "neutral") }}{% endif %}
-      {% if f.roce_pct is not none %}{{ m.pill("ROCE " ~ "%.0f%%" | format(f.roce_pct), "neutral") }}{% endif %}
-    </div>
-    {% endif %}
-
-    {% if c.assessment %}
-    <div class="mt-4 grid md:grid-cols-2 gap-3">
-      <details class="rounded-2xl border border-surface-line dark:border-surface-darkline p-4 group" open>
-        <summary class="cursor-pointer list-none flex items-center justify-between font-medium text-mint-600"><span>Strengths &amp; growth drivers</span><span class="text-ink-500 group-open:rotate-180 transition">&#9662;</span></summary>
-        <ul class="mt-2 space-y-1.5 text-sm">{% for x in c.assessment.strengths %}<li class="flex gap-2"><span class="text-mint">&#9679;</span><span>{{ x }}</span></li>{% endfor %}</ul>
-      </details>
-      <details class="rounded-2xl border border-surface-line dark:border-surface-darkline p-4 group" open>
-        <summary class="cursor-pointer list-none flex items-center justify-between font-medium text-crimson-600"><span>Risks &amp; red flags</span><span class="text-ink-500 group-open:rotate-180 transition">&#9662;</span></summary>
-        <ul class="mt-2 space-y-1.5 text-sm">{% for x in c.assessment.risks %}<li class="flex gap-2"><span class="text-crimson">&#9679;</span><span>{{ x }}</span></li>{% endfor %}</ul>
-      </details>
-    </div>
-    <p class="mt-2 text-xs text-ink-500">{{ c.assessment.rationale }} {% if c.assessment_method == "llm" %}<span class="opacity-70">(AI assessment)</span>{% endif %}</p>
-    {% endif %}
-
-    {% if c.news %}
-    <details class="mt-3 group">
-      <summary class="cursor-pointer list-none text-sm font-medium text-ink-900 dark:text-white flex items-center gap-2">News sentiment feed <span class="text-xs text-ink-500">({{ c.news | length }}, last 14 days{% if c.news_score is not none %}, net {{ "%+.2f" | format(c.news_score) }}{% endif %})</span><span class="text-ink-500 group-open:rotate-180 transition">&#9662;</span></summary>
-      <ul class="mt-2 divide-y divide-surface-line dark:divide-surface-darkline text-sm">
-        {% for n in c.news %}
-        <li class="py-2 flex items-start justify-between gap-3">
-          <div class="min-w-0"><a href="{{ n.link }}" target="_blank" rel="noopener" class="text-ink-900 dark:text-white hover:text-indigo">{{ n.headline }}</a><p class="text-xs text-ink-500">{{ n.source or "unknown" }} &middot; {{ n.published_label }}</p></div>
-          <div class="shrink-0 text-right">{{ m.sentiment_pill(n.sentiment) }}<p class="text-xs mt-0.5">{{ m.signed(n.impact_score) }}</p></div>
+    <div class="px-5 pb-5 md:px-6 md:pb-6 border-t border-surface-line dark:border-surface-darkline pt-4">
+      <!-- Timeline -->
+      <ol class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+        {% for label, d, est in [("Bidding opens", l.open_date, false), ("Bidding closes", l.close_date, false), ("Allotment", l.allotment_date, l.dates_estimated), ("Listing", l.listing_date, l.dates_estimated)] %}
+        <li class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3">
+          <p class="text-xs text-ink-500">{{ label }}{% if est and d %} <span title="Estimated from the close date (SEBI T+3)">(est.)</span>{% endif %}</p>
+          <p class="num font-semibold text-ink-900 dark:text-white">{{ d.strftime("%a %d %b %Y") if d else "TBA" }}</p>
         </li>
         {% endfor %}
-      </ul>
-    </details>
-    {% endif %}
-  </article>
+      </ol>
+      {% if l.est_listing_price %}<p class="mt-2 text-xs text-ink-500">Estimated listing price from GMP: &#8377;<span class="num">{{ "{:,.2f}".format(l.est_listing_price) }}</span> ({{ l.gmp_source or "unofficial" }}).</p>{% endif %}
+
+      <dl class="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+        <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Price band</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.price_low %}&#8377;{{ "%g" | format(l.price_low) }}{% if l.price_high != l.price_low %} - {{ "%g" | format(l.price_high) }}{% endif %}{% else %}-{% endif %}</dd></div>
+        <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Lot size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ l.lot_size or "-" }}{% if l.lot_size and l.price_high %} <span class="text-xs font-normal text-ink-500">(&#8377;{{ "{:,.0f}".format(l.lot_size * l.price_high) }})</span>{% endif %}</dd></div>
+        <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Issue size</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.issue_size_cr %}&#8377;{{ "{:,.0f}".format(l.issue_size_cr) }} cr{% else %}-{% endif %}{% if l.issue_shares %} <span class="text-xs font-normal text-ink-500">({{ "{:,.0f}".format(l.issue_shares) }} sh)</span>{% endif %}</dd></div>
+        <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Fresh / OFS (cr)</dt><dd class="num font-semibold text-ink-900 dark:text-white">{% if l.fresh_issue_cr is not none or l.ofs_cr is not none %}{{ "{:,.0f}".format(l.fresh_issue_cr or 0) }} / {{ "{:,.0f}".format(l.ofs_cr or 0) }}{% else %}-{% endif %}</dd></div>
+        <div class="rounded-xl bg-surface-1 dark:bg-surface-dark p-3"><dt class="text-xs text-ink-500">Subscribed</dt><dd class="num font-semibold text-ink-900 dark:text-white">{{ "%.2fx" | format(l.subscription_times) if l.subscription_times else "-" }}</dd></div>
+      </dl>
+
+      {% if l.fundamentals.has_data() %}
+      <div class="mt-3 flex flex-wrap gap-1.5 text-xs">
+        {% set f = l.fundamentals %}
+        {% if f.revenue_growth_pct is not none %}{{ m.pill("Rev growth " ~ "%.0f%%" | format(f.revenue_growth_pct), "bullish" if f.revenue_growth_pct >= 20 else "neutral") }}{% endif %}
+        {% if f.pat_margin_pct is not none %}{{ m.pill("PAT margin " ~ "%.1f%%" | format(f.pat_margin_pct), "bullish" if f.pat_margin_pct >= 10 else "neutral") }}{% endif %}
+        {% if f.debt_equity is not none %}{{ m.pill("D/E " ~ "%.2f" | format(f.debt_equity), "bearish" if f.debt_equity >= 1 else "neutral") }}{% endif %}
+        {% if f.pe is not none %}{{ m.pill("P/E " ~ "%.0f" | format(f.pe) ~ (" vs ind. " ~ "%.0f" | format(f.industry_pe) if f.industry_pe else ""), "bearish" if f.industry_pe and f.pe > f.industry_pe * 1.25 else "neutral") }}{% endif %}
+        {% if f.roe_pct is not none %}{{ m.pill("ROE " ~ "%.0f%%" | format(f.roe_pct), "neutral") }}{% endif %}
+        {% if f.roce_pct is not none %}{{ m.pill("ROCE " ~ "%.0f%%" | format(f.roce_pct), "neutral") }}{% endif %}
+      </div>
+      {% endif %}
+
+      {% if c.assessment %}
+      <div class="mt-4 grid md:grid-cols-2 gap-3">
+        <div class="rounded-2xl border border-surface-line dark:border-surface-darkline p-4">
+          <p class="font-medium text-mint-600">Strengths &amp; growth drivers</p>
+          <ul class="mt-2 space-y-1.5 text-sm">{% for x in c.assessment.strengths %}<li class="flex gap-2"><span class="text-mint">&#9679;</span><span>{{ x }}</span></li>{% endfor %}</ul>
+        </div>
+        <div class="rounded-2xl border border-surface-line dark:border-surface-darkline p-4">
+          <p class="font-medium text-crimson-600">Risks &amp; red flags</p>
+          <ul class="mt-2 space-y-1.5 text-sm">{% for x in c.assessment.risks %}<li class="flex gap-2"><span class="text-crimson">&#9679;</span><span>{{ x }}</span></li>{% endfor %}</ul>
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-ink-500">{{ c.assessment.rationale }}{% if c.assessment_method == "llm" %} <span class="opacity-70">(AI assessment)</span>{% endif %}</p>
+      {% endif %}
+
+      <div class="mt-4">
+        <p class="text-sm font-medium text-ink-900 dark:text-white">News sentiment feed <span class="text-xs font-normal text-ink-500">(last 14 days{% if c.news_score is not none %}, net {{ "%+.2f" | format(c.news_score) }}{% endif %})</span></p>
+        {% if c.news %}
+        <ul class="mt-1 divide-y divide-surface-line dark:divide-surface-darkline text-sm">
+          {% for n in c.news %}
+          <li class="py-2 flex items-start justify-between gap-3">
+            <div class="min-w-0"><a href="{{ n.link }}" target="_blank" rel="noopener" class="text-ink-900 dark:text-white hover:text-indigo">{{ n.headline }}</a><p class="text-xs text-ink-500">{{ n.source or "unknown" }} &middot; {{ n.published_label }}</p></div>
+            <div class="shrink-0 text-right">{{ m.sentiment_pill(n.sentiment) }}<p class="text-xs mt-0.5">{{ m.signed(n.impact_score) }}</p></div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="text-sm text-ink-500 mt-1">No recent articles found.</p>{% endif %}
+      </div>
+    </div>
+  </details>
   {% endfor %}
-  <p class="text-xs text-ink-500">Grey market premiums are unofficial, unregulated indications and are not a listing forecast. Issue data from NSE; details can be corrected or added via <code>ipo_overrides.json</code> in the data folder.</p>
+  <p class="text-xs text-ink-500">Click a card to expand it. Grey market premiums are unofficial, unregulated indications and are not a listing forecast; "GMP unavailable" means no trustworthy figure could be read for that issue. Allotment and listing dates marked (est.) follow SEBI's T+3 timeline from the close date. Issue data from NSE; details can be corrected or added via <code>ipo_overrides.json</code> in the data folder.</p>
 </section>
 
 <!-- ============ Tab 2 ============ -->
@@ -116,7 +137,7 @@
     <tbody>
     {% for r in listed %}
       <tr>
-        <td><a href="/stock/{{ r.symbol }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ r.company }}</a><p class="text-xs text-ink-500 num">{{ r.symbol }}{% if r.series == "SME" %} &middot; SME{% endif %}</p>{% if r.error %}<p class="text-xs text-crimson-600">{{ r.error }}</p>{% endif %}</td>
+        <td>{% if r.chart_symbol %}<a href="/stock/{{ r.chart_symbol }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ r.company }}</a>{% else %}<span class="font-medium text-ink-900 dark:text-white">{{ r.company }}</span>{% endif %}<p class="text-xs text-ink-500 num">{{ r.symbol.rsplit(".", 1)[0] }}{% if r.series == "SME" %} &middot; SME{% endif %}{% if r.data_source == "nse" %} &middot; NSE quote only{% endif %}</p>{% if r.error %}<p class="text-xs text-amber-600 dark:text-amber-400">{{ r.error }}</p>{% endif %}</td>
         <td class="text-xs text-ink-500 whitespace-nowrap">{{ r.listing_date.strftime("%d %b %Y") if r.listing_date else "-" }}</td>
         <td class="text-right">{{ m.money(r.issue_price) }}</td>
         <td class="text-right">{{ m.money(r.listing_close) }}{% if r.listing_open %}<p class="text-[10px] text-ink-500">open {{ "{:,.2f}".format(r.listing_open) }}</p>{% endif %}</td>
@@ -128,7 +149,7 @@
     </tbody>
   </table>
   {% else %}<p class="mt-3 text-sm text-ink-500">No listings found in the window (or NSE was unreachable).</p>{% endif %}
-  <p class="mt-3 text-xs text-ink-500">Listing gain = listing-day close vs issue price. Total gain = current price vs issue price.</p>
+  <p class="mt-3 text-xs text-ink-500">Listing gain = listing-day close vs issue price. Total gain = current price vs issue price. Rows without prices are real NSE listings that Yahoo Finance and NSE's quote service do not carry yet, which is common for SME and very recent issues; they fill in once data appears.</p>
 </section>
 
 <form method="post" action="/ipo/refresh" class="text-xs text-ink-500">Data refreshed {{ fetched_label }} &middot; <button class="underline">Refresh now</button></form>

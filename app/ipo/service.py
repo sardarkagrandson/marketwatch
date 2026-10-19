@@ -95,9 +95,22 @@ def upcoming_listings(force: bool = False) -> list[IPOListing]:
     for r in rows:
         if r.open_date and r.close_date:
             r.status = sources._status(r.open_date, r.close_date, today)
+            if r.allotment_date is None or r.listing_date is None:
+                # SEBI T+3 timeline: allotment about T+1, listing about T+3 working days after close
+                r.allotment_date = r.allotment_date or _add_business_days(r.close_date, 1)
+                r.listing_date = r.listing_date or _add_business_days(r.close_date, 3)
+                r.dates_estimated = True
     rows = [r for r in rows if r.close_date is None or r.close_date >= today - timedelta(days=2)]
     order = {"open": 0, "upcoming": 1, "closed": 2}
     return sorted(rows, key=lambda r: (order.get(r.status, 3), r.open_date or date.max))
+
+
+def _add_business_days(d: date, n: int) -> date:
+    while n > 0:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            n -= 1
+    return d
 
 
 def _ipo_news(listing: IPOListing) -> tuple[list[dict], float | None]:
@@ -172,30 +185,47 @@ def upcoming_cards(force: bool = False) -> list[IPOCard]:
 
 # ---------------------------------------------------------------- recently listed
 def _performance(item: ListedIPO) -> ListedIPO:
+    """Fill listing-day and current prices. Tries Yahoo .NS, then .BO, then NSE's own quote.
+    Very recent and SME listings are often missing from Yahoo for days or weeks."""
     from app.market.data import get_engine
 
-    try:
-        engine = get_engine()
-        hist = engine.history(item.symbol, "6mo")
-        if item.listing_date:
-            since = hist[hist.index.date >= item.listing_date] if hasattr(hist.index, "date") else hist
-            if not since.empty:
-                hist_l = since
+    engine = get_engine()
+    base = item.symbol.rsplit(".", 1)[0]
+    last_err = None
+    for sym, src in ((f"{base}.NS", "yfinance-ns"), (f"{base}.BO", "yfinance-bo")):
+        try:
+            hist = engine.history(sym, "6mo")
+            if item.listing_date and hasattr(hist.index, "date"):
+                since = hist[hist.index.date >= item.listing_date]
+                hist_l = since if not since.empty else hist.tail(30)
             else:
                 hist_l = hist.tail(30)
-        else:
-            hist_l = hist.tail(30)
-        first = hist_l.iloc[0]
-        quote = engine.quote(item.symbol)
-        item.listing_open = round(float(first["Open"]), 2)
-        item.listing_close = round(float(first["Close"]), 2)
-        item.ltp = quote.ltp
-        item.is_stale = quote.is_stale
-        if item.issue_price:
+            first = hist_l.iloc[0]
+            quote = engine.quote(sym)
+            item.listing_open = round(float(first["Open"]), 2)
+            item.listing_close = round(float(first["Close"]), 2)
+            item.ltp, item.is_stale = quote.ltp, quote.is_stale
+            item.data_source, item.chart_symbol = src, sym
+            break
+        except Exception as exc:
+            last_err = exc
+    if item.ltp is None and not get_settings().offline_mode:
+        try:  # NSE's own quote gives a current price even when Yahoo has no history yet
+            from nsemine.live import get_stock_live_quotes
+
+            raw = get_stock_live_quotes(base)
+            if raw and raw.get("close"):
+                item.ltp, item.data_source = float(raw["close"]), "nse"
+        except Exception as exc:
+            last_err = exc
+    if item.ltp is None:
+        item.error = "No price data yet on Yahoo Finance or NSE (common for SME and very recent listings)"
+        log.debug("listed IPO %s: %s", item.symbol, last_err)
+        return item
+    if item.issue_price:
+        if item.listing_close is not None:
             item.listing_gain_pct = round((item.listing_close / item.issue_price - 1) * 100, 2)
-            item.total_gain_pct = round((item.ltp / item.issue_price - 1) * 100, 2)
-    except Exception as exc:
-        item.error = str(exc)[:160]
+        item.total_gain_pct = round((item.ltp / item.issue_price - 1) * 100, 2)
     return item
 
 

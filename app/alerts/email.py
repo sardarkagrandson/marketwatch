@@ -46,6 +46,7 @@ async def send_html_email(to: str, subject: str, html: str) -> tuple[bool, str]:
     msg["Subject"] = subject
     msg.set_content("This alert requires an HTML-capable mail client.")
     msg.add_alternative(html, subtype="html")
+    implicit_tls = settings.smtp_port == 465          # SMTPS: TLS from the first byte
     try:
         await aiosmtplib.send(
             msg,
@@ -53,10 +54,17 @@ async def send_html_email(to: str, subject: str, html: str) -> tuple[bool, str]:
             port=settings.smtp_port,
             username=settings.smtp_username or None,
             password=settings.smtp_password or None,
-            start_tls=settings.smtp_use_tls,
+            use_tls=implicit_tls,
+            start_tls=(settings.smtp_use_tls and not implicit_tls),
             timeout=30,
         )
         return True, "delivered"
     except Exception as exc:
         log.error("email delivery failed: %s", exc)
         return False, f"delivery failed: {exc}"
+
+
+async def send_test_email(to: str) -> tuple[bool, str]:
+    """Send a short test message so SMTP settings can be verified end to end."""
+    html = _env.get_template("email/test.html").render(to=to, generated_at=datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC"))
+    return await send_html_email(to, "[SnitchofDalal] Test email - alerts are working", html)

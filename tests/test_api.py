@@ -86,3 +86,8 @@ def test_chart_api(client):
     assert client.get("/api/chart/TCS?range=2w").status_code == 400
     assert client.get("/api/chart/TCS?range=custom&start=2026-09-10&end=2026-09-01").status_code == 400
     assert 'id="price-chart"' in client.get("/stock/TCS").text
+
+
+def test_test_email_saved_to_outbox(client):
+    r = client.post("/spotlight/test-email", data={"email": "me@example.com"}, follow_redirects=False)
+    assert r.status_code == 303 and "Error" in r.headers["location"] and "SMTP" in r.headers["location"]

@@ -270,6 +270,15 @@ async def spotlight_poll_now(entry_id: int):
     return RedirectResponse(f"/spotlight?msg=Poll result: {result.get('status')}; alerts: {', '.join(result.get('alerts', [])) or 'none'}", status_code=303)
 
 
+@app.post("/spotlight/test-email")
+async def spotlight_test_email(email: str = Form(...)):
+    from app.alerts.email import send_test_email
+
+    delivered, detail = await send_test_email(email)
+    msg = f"Test email delivered to {email}" if delivered else f"Error: {detail}"
+    return RedirectResponse(f"/spotlight?msg={msg}", status_code=303)
+
+
 @app.get("/portfolio", response_class=HTMLResponse)
 def portfolio_page(request: Request, db: Session = Depends(get_db), msg: str | None = None):
     holdings = db.query(Holding).order_by(Holding.buy_date.desc()).all()

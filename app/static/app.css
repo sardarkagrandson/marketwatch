@@ -76,3 +76,5 @@ html.dark .range-btn.is-active { background: #2B303D; color: #fff; }
 html.dark .chart-tip { background: #fff; color: #1E222D; }
 .chart-grid { stroke: var(--line); stroke-width: 1; }
 .chart-axis { fill: var(--ink-500); font-size: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; }
+.ipo-card > summary { border-radius: 1rem; }
+.ipo-card[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }

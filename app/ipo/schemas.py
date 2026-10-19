@@ -37,6 +37,9 @@ class IPOListing(BaseModel):
     ofs_cr: float | None = None
     subscription_times: float | None = None
     status: str = "upcoming"      # upcoming | open | closed
+    allotment_date: date | None = None
+    listing_date: date | None = None
+    dates_estimated: bool = True  # allotment/listing derived from close date (T+1 / T+3)
     gmp: float | None = None      # grey market premium in rupees (unofficial)
     gmp_source: str | None = None
     fundamentals: IPOFundamentals = Field(default_factory=IPOFundamentals)
@@ -76,6 +79,8 @@ class ListedIPO(BaseModel):
     listing_gain_pct: float | None = None
     total_gain_pct: float | None = None
     is_stale: bool = False
+    data_source: str | None = None   # yfinance-ns | yfinance-bo | nse
+    chart_symbol: str | None = None  # symbol that actually has price data (for links)
     error: str | None = None
 
 

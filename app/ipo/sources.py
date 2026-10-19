@@ -206,23 +206,34 @@ def fetch_gmp_html(url: str) -> str:
 
 
 def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
-    """Best-effort parse of a public grey-market-premium table into {normalised company: gmp}.
+    """Parse one or more public grey-market-premium pages (comma-separated URLs) into
+    {normalised company: gmp}; the first page that yields rows wins.
 
     Grey market premiums are unofficial, unregulated indications and change hourly.
     The page layout is outside our control, so this returns {} on any failure.
     """
-    url = url or get_settings().ipo_gmp_url
+    urls = [u.strip() for u in (url if url is not None else get_settings().ipo_gmp_url).split(",") if u.strip()]
     _gmp_diag.clear()
-    _gmp_diag.update(url=url, fetched_at=datetime.now().isoformat(timespec="seconds"))
-    if not url:
-        return {}
+    _gmp_diag.update(attempts=[], fetched_at=datetime.now().isoformat(timespec="seconds"))
+    for one in urls:
+        table = _fetch_gmp_table_one(one)
+        if table:
+            return table
+    return {}
+
+
+def _fetch_gmp_table_one(url: str) -> dict[str, float]:
+    diag: dict = {"url": url}
+    _gmp_diag["attempts"].append(diag)
+    _gmp_diag.update(url=url)
 
     out: dict[str, float] = {}
     try:
         html = fetch_gmp_html(url)
     except Exception as exc:
-        log.warning("GMP fetch failed: %s", exc)
+        log.warning("GMP fetch failed (%s): %s", url, exc)
         _gmp_diag["error"] = str(exc)[:200]
+        diag["error"] = str(exc)[:200]
         return {}
     _gmp_diag["tables"] = len(re.findall(r"<table", html, flags=re.I))
     _gmp_diag["header_rows"] = []
@@ -259,6 +270,8 @@ def fetch_gmp_table(url: str | None = None) -> dict[str, float]:
             continue
         out[_norm_company(name)] = gmp
     _gmp_diag["parsed"] = len(out)
+    diag.update(status=_gmp_diag.get("status"), bytes=_gmp_diag.get("bytes"), tables=_gmp_diag.get("tables"),
+                header_rows=_gmp_diag.get("header_rows"), sample_rows=_gmp_diag.get("sample_rows"), parsed=len(out), error=_gmp_diag.get("error"))
     return out
 
 
