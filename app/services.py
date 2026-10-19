@@ -22,6 +22,14 @@ DISCLAIMER = (
 )
 
 
+def disclaimer_for(profile) -> str:
+    return (
+        "Signals shown are statistical and news-derived biases, not investment advice. "
+        "Equity investments are subject to market risk; past performance does not guarantee future results. "
+        f"Please consult {profile.disclaimer_regulator} before trading."
+    )
+
+
 @dataclass
 class StockAnalysis:
     ticker: ResolvedTicker
@@ -70,8 +78,8 @@ class StockAnalysis:
         }
 
 
-def analyze(query: str, include_news: bool = True) -> StockAnalysis:
-    ticker = resolve_ticker(query)
+def analyze(query: str, include_news: bool = True, market: str = "IN") -> StockAnalysis:
+    ticker = resolve_ticker(query, market=market)
     engine = get_engine()
     history = engine.history(ticker.symbol, "1y")
     quote = engine.quote(ticker.symbol)
@@ -94,12 +102,12 @@ def analyze(query: str, include_news: bool = True) -> StockAnalysis:
     return StockAnalysis(
         ticker=ticker, quote=quote, technicals=technicals, news=news, assessments=assessments,
         sentiment=sentiment, news_fetched_at=fetched_at, sparkline=sparkline_points(history),
-        market=market_status(),
+        market=market_status(market=ticker.market),
     )
 
 
-def probability_for(query: str, target_price: float, horizon_days: int) -> tuple[ResolvedTicker, Quote, TouchProbability]:
-    ticker = resolve_ticker(query)
+def probability_for(query: str, target_price: float, horizon_days: int, market: str = "IN") -> tuple[ResolvedTicker, Quote, TouchProbability]:
+    ticker = resolve_ticker(query, market=market)
     engine = get_engine()
     history = engine.history(ticker.symbol, "1y")
     quote = engine.quote(ticker.symbol)

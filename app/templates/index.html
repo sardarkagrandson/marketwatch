@@ -24,16 +24,16 @@
     <path d="M10 150 L50 110 L80 130 L120 70 L150 90 L190 30"/><circle cx="190" cy="30" r="8" fill="currentColor" stroke="none"/>
   </svg>
   <div class="relative max-w-2xl">
-    <p class="inline-flex items-center gap-2 text-xs font-medium text-mint-600 bg-mint-50 dark:bg-mint/15 px-3 py-1 rounded-full">NSE &middot; BSE &middot; news sentiment &middot; technicals</p>
-    <h1 class="mt-3 text-3xl md:text-4xl font-semibold text-ink-900 dark:text-white leading-tight">Know what Dalal Street is whispering before you act.</h1>
-    <p class="mt-3 text-ink-500">Search any listed company to see live price action, 7-day news scored for sentiment and impact, technical setups, and the statistical odds of a price reaching your target.</p>
+    <p class="inline-flex items-center gap-2 text-xs font-medium text-mint-600 bg-mint-50 dark:bg-mint/15 px-3 py-1 rounded-full">{{ profile.flag }} {{ profile.exchange }} &middot; news sentiment &middot; technicals</p>
+    <h1 class="mt-3 text-3xl md:text-4xl font-semibold text-ink-900 dark:text-white leading-tight">{{ profile.hero_title }}</h1>
+    <p class="mt-3 text-ink-500">{{ profile.hero_lead }}</p>
     <form action="/stock" method="get" class="mt-6 flex flex-col sm:flex-row gap-3">
-      <div class="relative flex-1"><input name="q" required data-suggest data-submit="1" placeholder="Try “Tata Motors”, “HDFC Bank” or “INFY.NS”"
+      <div class="relative flex-1"><input name="q" required data-suggest data-submit="1" placeholder="Try {% for s in profile.sample_queries %}“{{ s }}”{% if not loop.last %}, {% endif %}{% endfor %}"
              class="w-full h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-mint/40"></div>
       <button class="btn-primary h-12 px-6">Analyse</button>
     </form>
     <div class="mt-4 flex flex-wrap gap-2">
-      {% for p in quick[:10] %}<a href="/stock/{{ p.symbol }}.NS" class="px-3 py-1 rounded-full text-xs bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline hover:border-mint">{{ p.symbol }}</a>{% endfor %}
+      {% for p in quick[:10] %}<a href="/stock/{{ p.symbol }}{{ profile.default_suffix }}" class="px-3 py-1 rounded-full text-xs bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline hover:border-mint">{{ p.symbol }}</a>{% endfor %}
     </div>
   </div>
 </section>
@@ -57,7 +57,7 @@
       </div>
       <div class="mt-3 flex items-end justify-between gap-2">
         <div>
-          <p class="num text-lg font-semibold text-ink-900 dark:text-white">&#8377;{{ "{:,.2f}".format(q.ltp) }}</p>
+          <p class="num text-lg font-semibold text-ink-900 dark:text-white">{{ q.currency_symbol }}{{ "{:,.2f}".format(q.ltp) }}</p>
           <p class="text-xs">{{ m.signed(q.change_pct, "%") }}</p>
         </div>
         {{ m.spark(q.sparkline, q.change >= 0) }}
@@ -80,7 +80,7 @@
       {% if spotlight %}
       <ul class="mt-3 space-y-1 text-sm">
         {% for e in spotlight %}
-        <li class="flex justify-between gap-3"><span class="truncate">{{ e.symbol }}</span><span class="num text-ink-500">{% if e.last_price %}&#8377;{{ "{:,.2f}".format(e.last_price) }}{% else %}&mdash;{% endif %}</span></li>
+        <li class="flex justify-between gap-3"><span class="truncate">{{ e.symbol }}</span><span class="num text-ink-500">{% if e.last_price %}{{ cur_for(e.symbol) }}{{ "{:,.2f}".format(e.last_price) }}{% else %}&mdash;{% endif %}</span></li>
         {% endfor %}
       </ul>
       {% endif %}

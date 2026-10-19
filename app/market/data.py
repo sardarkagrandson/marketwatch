@@ -23,6 +23,24 @@ log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- market hours
 from app.market.calendar import IST, is_market_open, market_status, now_ist  # noqa: E402,F401
+from app.markets import DEFAULT_MARKET, MarketProfile, get_market, market_for_symbol  # noqa: E402
+
+
+def _scale(df: pd.DataFrame, divisor: float) -> pd.DataFrame:
+    """Yahoo quotes JSE equities in cents; convert OHLC to rand (indices are already in points)."""
+    if divisor == 1.0:
+        return df
+    out = df.copy()
+    for col in ("Open", "High", "Low", "Close"):
+        if col in out:
+            out[col] = out[col] / divisor
+    return out
+
+
+def _divisor_for(symbol: str) -> float:
+    if symbol.startswith("^"):
+        return 1.0
+    return market_for_symbol(symbol).price_divisor
 
 
 # ---------------------------------------------------------------- cache
@@ -69,7 +87,9 @@ class Quote:
     as_of: str                 # ISO timestamp of last price
     is_stale: bool             # True when the price is a previous-session close
     market_open: bool
-    source: str                # yfinance | offline
+    source: str                # yfinance | nse | offline
+    market: str = "IN"
+    currency_symbol: str = "\u20b9"
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -90,7 +110,8 @@ class YFinanceProvider:
         if df is None or df.empty:
             raise LookupError(f"No price history returned for {symbol}")
         df = df.rename(columns=str.title)
-        return df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
+        df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
+        return _scale(df, _divisor_for(symbol))
 
     def quote(self, symbol: str, history: pd.DataFrame) -> Quote:
         import yfinance as yf
@@ -112,6 +133,14 @@ class YFinanceProvider:
             }
         except Exception as exc:  # fast_info can fail for illiquid tickers
             log.debug("fast_info failed for %s: %s", symbol, exc)
+        div = _divisor_for(symbol)
+        if div != 1.0:
+            for k in ("last_price", "previous_close", "day_high", "day_low", "year_high", "year_low", "open"):
+                if info.get(k) is not None:
+                    try:
+                        info[k] = float(info[k]) / div
+                    except (TypeError, ValueError):
+                        info[k] = None
         from app.market.tickers import resolve_ticker
 
         resolved = resolve_ticker(symbol, allow_search=False)
@@ -217,18 +246,19 @@ class OfflineProvider:
 def build_quote(symbol: str, name: str, history: pd.DataFrame, info: dict, source: str) -> Quote:
     last = history.iloc[-1]
     prev = history.iloc[-2] if len(history) > 1 else last
-    open_now = is_market_open()
+    profile = market_for_symbol(symbol)
+    open_now = is_market_open(market=profile)
 
     ltp = _f(info.get("last_price")) or float(last["Close"])
     prev_close = _f(info.get("previous_close")) or float(prev["Close"])
     last_ts = history.index[-1]
     if isinstance(last_ts, pd.Timestamp):
-        last_ts = last_ts.tz_localize(IST) if last_ts.tzinfo is None else last_ts.astimezone(IST)
+        last_ts = last_ts.tz_localize(profile.zone) if last_ts.tzinfo is None else last_ts.astimezone(profile.zone)
         as_of = last_ts.isoformat()
         last_date = last_ts.date()
     else:
         as_of, last_date = str(last_ts), None
-    today = now_ist().date()
+    today = datetime.now(profile.zone).date()
     if info.get("last_update"):
         as_of = info["last_update"]
     stale = (not open_now) or (last_date is not None and last_date < today and info.get("last_price") is None)
@@ -239,7 +269,7 @@ def build_quote(symbol: str, name: str, history: pd.DataFrame, info: dict, sourc
     return Quote(
         symbol=symbol,
         name=name,
-        currency=str(info.get("currency") or "INR"),
+        currency=profile.currency,
         ltp=round(ltp, 2),
         previous_close=round(prev_close, 2),
         day_high=_f(info.get("day_high")) or round(float(last["High"]), 2),
@@ -254,6 +284,8 @@ def build_quote(symbol: str, name: str, history: pd.DataFrame, info: dict, sourc
         is_stale=bool(stale),
         market_open=open_now,
         source=source,
+        market=profile.id,
+        currency_symbol=profile.currency_symbol,
     )
 
 
@@ -281,7 +313,7 @@ class MarketDataEngine:
             elif settings.quote_source.lower() == "yfinance":
                 self._provider = YFinanceProvider()
             else:
-                self._provider = NSELiveProvider()
+                self._provider = NSELiveProvider()   # falls back to Yahoo for non-NSE symbols
         return self._provider
 
     def history(self, symbol: str, period: str = "1y", interval: str = "1d",
@@ -297,7 +329,7 @@ class MarketDataEngine:
 
     def quote(self, symbol: str) -> Quote:
         key = f"quote:{self.provider.name}:{symbol}"
-        ttl = get_settings().quote_cache_seconds if is_market_open() else get_settings().history_cache_seconds
+        ttl = get_settings().quote_cache_seconds if is_market_open(market=market_for_symbol(symbol)) else get_settings().history_cache_seconds
         cached = _cache.get(key, ttl)
         if cached is not None:
             return cached
@@ -330,21 +362,12 @@ def sparkline_points(history: pd.DataFrame, n: int = 60) -> list[float]:
 
 
 # ---------------------------------------------------------------- market overview (home page)
-INDICES = [
-    ("^NSEI", "NIFTY 50"),
-    ("^BSESN", "SENSEX"),
-    ("^NSEBANK", "NIFTY Bank"),
-    ("^CNXIT", "NIFTY IT"),
-]
-POPULAR = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "TATAMOTORS.NS", "SBIN.NS", "BHARTIARTL.NS"]
-
-
 def _quote_or_none(symbol: str, name: str | None = None) -> Quote | None:
     try:
         engine = get_engine()
         hist = engine.history(symbol, "6mo")
         key = f"quote:{engine.provider.name}:{symbol}"
-        ttl = get_settings().quote_cache_seconds if is_market_open() else get_settings().history_cache_seconds
+        ttl = get_settings().quote_cache_seconds if is_market_open(market=market_for_symbol(symbol)) else get_settings().history_cache_seconds
         q = _cache.get(key, ttl)
         if q is None:
             if isinstance(engine.provider, OfflineProvider):
@@ -363,13 +386,14 @@ def _quote_or_none(symbol: str, name: str | None = None) -> Quote | None:
         return None
 
 
-def market_overview(timeout: float = 8.0) -> dict:
+def market_overview(timeout: float = 8.0, market=DEFAULT_MARKET) -> dict:
     """Index strip + popular stock cards for the home page; fetched concurrently, best effort."""
     from concurrent.futures import ThreadPoolExecutor, wait
 
+    p = get_market(market) if not isinstance(market, MarketProfile) else market
     with ThreadPoolExecutor(max_workers=8) as pool:
-        idx_f = {pool.submit(_quote_or_none, sym, name): (sym, name) for sym, name in INDICES}
-        pop_f = {pool.submit(_quote_or_none, sym): sym for sym in POPULAR}
+        idx_f = {pool.submit(_quote_or_none, sym, name): (sym, name) for sym, name in p.indices}
+        pop_f = {pool.submit(_quote_or_none, sym): sym for sym in p.popular}
         wait(list(idx_f) + list(pop_f), timeout=timeout)
     indices = [f.result() for f in idx_f if f.done() and f.result() is not None]
     popular = [f.result() for f in pop_f if f.done() and f.result() is not None]
@@ -407,9 +431,10 @@ def chart_series(symbol: str, rng: str = "1y", start: datetime | None = None, en
         step = int(np.ceil(len(df) / MAX_POINTS))
         df = pd.concat([df.iloc[::step], df.iloc[[-1]]]).loc[~pd.concat([df.iloc[::step], df.iloc[[-1]]]).index.duplicated()]
     points = []
+    zone = market_for_symbol(symbol).zone
     for ts, row in df.iterrows():
         t = ts if isinstance(ts, pd.Timestamp) else pd.Timestamp(ts)
-        t = t.tz_localize(IST) if t.tzinfo is None else t.tz_convert(IST)
+        t = t.tz_localize(zone) if t.tzinfo is None else t.tz_convert(zone)
         points.append([int(t.timestamp() * 1000), round(float(row["Close"]), 2)])
     first, last = (points[0][1], points[-1][1]) if points else (None, None)
     return {

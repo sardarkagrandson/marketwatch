@@ -15,7 +15,7 @@
         {% if a.ticker.confidence < 0.9 %}{{ m.pill("Matched via " ~ a.ticker.method ~ " (" ~ (a.ticker.confidence * 100) | round | int ~ "%)", "warning") }}{% endif %}
       </div>
       <div class="mt-4 flex flex-wrap items-end gap-x-4 gap-y-1">
-        <span class="hero-num text-ink-900 dark:text-white">&#8377;{{ "{:,.2f}".format(q.ltp) }}</span>
+        <span class="hero-num text-ink-900 dark:text-white">{{ q.currency_symbol }}{{ "{:,.2f}".format(q.ltp) }}</span>
         <span class="text-lg">{{ m.signed(q.change) }} <span class="text-ink-500">(</span>{{ m.signed(q.change_pct, "%") }}<span class="text-ink-500">)</span></span>
       </div>
       <p class="mt-1 text-xs text-ink-500">
@@ -36,7 +36,7 @@
 </section>
 
 <!-- Price chart -->
-<section class="card p-5 md:p-6" id="chart-card" data-symbol="{{ a.ticker.symbol }}">
+<section class="card p-5 md:p-6" id="chart-card" data-symbol="{{ a.ticker.symbol }}" data-currency="{{ q.currency_symbol }}">
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <h2 class="font-semibold text-ink-900 dark:text-white">Price chart</h2>
@@ -71,7 +71,7 @@
 
 <!-- KPI row -->
 <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
-  {{ m.stat("Previous close", m.money(q.previous_close), "", "Open " ~ ("{:,.2f}".format(q.open) if q.open else "-")) }}
+  {{ m.stat("Previous close", m.money(q.previous_close, 2, q.currency_symbol), "", "Open " ~ ("{:,.2f}".format(q.open) if q.open else "-")) }}
   <div class="card p-4">
     <p class="text-xs text-ink-500 mb-1">Day range</p>
     <div class="text-sm font-semibold text-ink-900 dark:text-white flex justify-between"><span class="num">{{ "{:,.2f}".format(q.day_low or 0) }}</span><span class="num">{{ "{:,.2f}".format(q.day_high or 0) }}</span></div>
@@ -170,7 +170,7 @@
   <h2 class="font-semibold text-ink-900 dark:text-white">Cutoff probability calculator</h2>
   <p class="text-xs text-ink-500 mt-1">P(touch) &asymp; 2 &middot; [1 &minus; &Phi;( |ln(P<sub>target</sub>/P<sub>0</sub>)| / (&sigma;&radic;T) )] using 1-year realised volatility.</p>
   <form method="get" action="/stock/{{ a.ticker.symbol }}#probability" class="mt-4 grid sm:grid-cols-3 gap-3 items-end">
-    <label class="text-sm"><span class="text-xs text-ink-500">Target / cutoff price (&#8377;)</span><input class="input mt-1" type="number" step="0.05" min="0.05" name="target" value="{{ target or '' }}" required placeholder="{{ (q.ltp * 1.05) | round(2) }}"></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Target / cutoff price ({{ q.currency_symbol }})</span><input class="input mt-1" type="number" step="0.05" min="0.05" name="target" value="{{ target or '' }}" required placeholder="{{ (q.ltp * 1.05) | round(2) }}"></label>
     <label class="text-sm"><span class="text-xs text-ink-500">Horizon (trading days)</span><input class="input mt-1" type="number" min="1" max="750" name="horizon" value="{{ horizon }}" required></label>
     <button class="btn-primary h-10">Estimate</button>
   </form>
@@ -178,9 +178,9 @@
   {% if prob %}
   <div class="mt-5 grid md:grid-cols-3 gap-4">
     <div class="rounded-2xl bg-surface-1 dark:bg-surface-dark p-5 md:col-span-1">
-      <p class="text-xs text-ink-500">Probability of touching &#8377;{{ "{:,.2f}".format(prob.target_price) }} within {{ prob.horizon_days }} trading days</p>
+      <p class="text-xs text-ink-500">Probability of touching {{ q.currency_symbol }}{{ "{:,.2f}".format(prob.target_price) }} within {{ prob.horizon_days }} trading days</p>
       <p class="hero-num mt-1 {% if prob.touch_probability >= 0.5 %}text-mint-600{% else %}text-ink-900 dark:text-white{% endif %}">{{ "%.1f" | format(prob.touch_probability * 100) }}%</p>
-      <p class="text-xs text-ink-500 mt-1">target is {{ "%+.1f" | format(prob.distance_pct) }}% {{ prob.direction }} current &#8377;{{ "{:,.2f}".format(prob.current_price) }}</p>
+      <p class="text-xs text-ink-500 mt-1">target is {{ "%+.1f" | format(prob.distance_pct) }}% {{ prob.direction }} current {{ q.currency_symbol }}{{ "{:,.2f}".format(prob.current_price) }}</p>
     </div>
     <dl class="text-sm grid grid-cols-2 gap-y-2 md:col-span-2 content-start">
       <dt class="text-ink-500">P(close beyond target at T)</dt><dd class="num text-right">{{ "%.1f" | format(prob.finish_beyond_probability * 100) }}%</dd>

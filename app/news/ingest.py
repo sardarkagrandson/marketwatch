@@ -17,7 +17,7 @@ from app.news.schemas import NewsArticle
 log = logging.getLogger(__name__)
 
 LOOKBACK_DAYS = 7
-GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"
+GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={q}&hl={hl}&gl={gl}&ceid={ceid}"
 YAHOO_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=IN&lang=en-IN"
 USER_AGENT = "Mozilla/5.0 (compatible; SnitchofDalalBot/0.1; +https://example.com)"
 
@@ -94,9 +94,12 @@ def filter_recent(articles: list[NewsArticle], days: int = LOOKBACK_DAYS) -> lis
     return [a for a in articles if (a.published_at if a.published_at.tzinfo else a.published_at.replace(tzinfo=timezone.utc)) >= cutoff]
 
 
-def fetch_query(query: str, days: int = LOOKBACK_DAYS, extra_urls: list[str] | None = None) -> list[NewsArticle]:
-    """Fetch Google News RSS for an arbitrary query (plus optional extra feeds); never raises."""
-    urls = [GOOGLE_NEWS_RSS.format(q=quote_plus(f"{query} when:{days}d"))] + list(extra_urls or [])
+def fetch_query(query: str, days: int = LOOKBACK_DAYS, extra_urls: list[str] | None = None, market: str = "IN") -> list[NewsArticle]:
+    """Fetch Google News RSS for an arbitrary query in the market's locale (plus optional extra feeds); never raises."""
+    from app.markets import get_market
+
+    loc = get_market(market).news_locale
+    urls = [GOOGLE_NEWS_RSS.format(q=quote_plus(f"{query} when:{days}d"), **loc)] + list(extra_urls or [])
     articles: list[NewsArticle] = []
     for url in urls:
         try:
@@ -107,9 +110,12 @@ def fetch_query(query: str, days: int = LOOKBACK_DAYS, extra_urls: list[str] | N
 
 
 def fetch_live(symbol: str, company_name: str) -> list[NewsArticle]:
+    from app.markets import market_for_symbol
+
     base = symbol.split(".")[0]
-    articles = fetch_query(f'"{company_name}" OR {base} stock', LOOKBACK_DAYS,
-                           extra_urls=[YAHOO_RSS.format(symbol=quote_plus(symbol))])
+    m = market_for_symbol(symbol)
+    articles = fetch_query(f'"{company_name}" OR {base} {"JSE" if m.id == "ZA" else "stock"}', LOOKBACK_DAYS,
+                           extra_urls=[YAHOO_RSS.format(symbol=quote_plus(symbol))], market=m.id)
     return filter_recent(dedupe(articles))
 
 

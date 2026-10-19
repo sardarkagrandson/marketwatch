@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, asdict
 
+from app.markets import market_for_symbol
 from app.models import Holding
 from app.services import analyze
 
@@ -51,6 +52,7 @@ class PortfolioHealth:
     sentiment_label: str
     flagged_count: int
     market: dict
+    mixed_currencies: bool = False
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -121,4 +123,5 @@ def portfolio_health(holdings: list[Holding]) -> PortfolioHealth:
         day_change=round(day, 2), day_change_pct=round(day / prev_mv * 100, 2) if prev_mv else 0.0,
         weighted_sentiment=round(weighted, 3), sentiment_label=label,
         flagged_count=sum(1 for r in rows if r.flags), market=market_status(),
+        mixed_currencies=len({market_for_symbol(h.symbol).currency for h in holdings}) > 1,
     )

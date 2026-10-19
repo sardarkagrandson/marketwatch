@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     app_name: str = "SnitchofDalal"
     data_dir: Path = Field(default=PROJECT_ROOT / "data")
     offline_mode: bool = False
+    # Market shown by default (IN = India, ZA = South Africa); users can switch in the header.
+    default_market: str = "IN"
     market_holidays: str = ""
+    market_holidays_za: str = ""
 
     # Device licensing: empty = open access. Set to the public key from tools/license_admin.py keygen.
     license_public_key: str = ""
@@ -62,6 +65,10 @@ class Settings(BaseSettings):
     @property
     def holiday_set(self) -> set[str]:
         return {h.strip() for h in self.market_holidays.split(",") if h.strip()}
+
+    @property
+    def holiday_set_za(self) -> set[str]:
+        return {h.strip() for h in self.market_holidays_za.split(",") if h.strip()}
 
     @property
     def llm_enabled(self) -> bool:

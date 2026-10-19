@@ -33,16 +33,22 @@
           <span class="absolute inset-y-0 left-3 flex items-center text-ink-500 pointer-events-none">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           </span>
-          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search NSE / BSE stocks, e.g. Tata Motors or INFY.NS" data-suggest data-submit="1"
+          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="{{ profile.search_placeholder }}" data-suggest data-submit="1"
                  class="w-full h-10 pl-9 pr-3 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-sm text-ink-900 dark:text-white placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-mint/40">
         </label>
       </form>
       <nav class="hidden md:flex items-center gap-1 text-sm font-medium">
-        <a href="/mf" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/mf') %}text-mint-600{% endif %}">Mutual funds</a>
-        <a href="/ipo" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/ipo') %}text-mint-600{% endif %}">IPO</a>
+        {% if "mf" in profile.modules %}<a href="/mf" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/mf') %}text-mint-600{% endif %}">Mutual funds</a>{% endif %}
+        {% if "ipo" in profile.modules %}<a href="/ipo" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/ipo') %}text-mint-600{% endif %}">IPO</a>{% endif %}
         <a href="/spotlight" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/spotlight') %}text-mint-600{% endif %}">Spotlight</a>
         <a href="/portfolio" class="px-3 py-2 rounded-full hover:bg-surface-1 dark:hover:bg-surface-dark {% if request.url.path.startswith('/portfolio') %}text-mint-600{% endif %}">Portfolio</a>
       </nav>
+      <div class="hidden sm:inline-flex rounded-full border border-surface-line dark:border-surface-darkline p-0.5 text-xs font-medium" role="group" aria-label="Market">
+        {% for mk in markets %}
+        <a href="/market/{{ mk.id }}?next={{ '/' if request.url.path.startswith(('/ipo', '/mf', '/stock')) and mk.id != profile.id else request.url.path }}" title="{{ mk.name }} ({{ mk.exchange }})"
+           class="px-2.5 py-1 rounded-full {% if mk.id == profile.id %}bg-mint text-white{% else %}text-ink-700 dark:text-slate-300 hover:bg-surface-1 dark:hover:bg-surface-dark{% endif %}">{{ mk.flag }} {{ mk.id }}</a>
+        {% endfor %}
+      </div>
       <button id="theme-toggle" type="button" aria-label="Toggle dark mode"
               class="w-10 h-10 rounded-full border border-surface-line dark:border-surface-darkline flex items-center justify-center hover:bg-surface-1 dark:hover:bg-surface-dark">
         <svg class="dark:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -51,7 +57,8 @@
     </div>
     <div class="md:hidden border-t border-surface-line dark:border-surface-darkline">
       <div class="max-w-6xl mx-auto px-4 h-10 flex items-center gap-4 text-sm font-medium">
-        <a href="/mf">Funds</a><a href="/ipo">IPO</a><a href="/spotlight">Spotlight</a><a href="/portfolio">Portfolio</a>
+        {% if "mf" in profile.modules %}<a href="/mf">Funds</a>{% endif %}{% if "ipo" in profile.modules %}<a href="/ipo">IPO</a>{% endif %}<a href="/spotlight">Spotlight</a><a href="/portfolio">Portfolio</a>
+        <span class="ml-auto inline-flex gap-1">{% for mk in markets %}<a href="/market/{{ mk.id }}?next=/" class="px-2 py-0.5 rounded-full {% if mk.id == profile.id %}bg-mint text-white{% endif %}">{{ mk.flag }} {{ mk.id }}</a>{% endfor %}</span>
       </div>
     </div>
   </header>
@@ -61,7 +68,7 @@
       <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full {% if market.open %}bg-mint-50 text-mint-600 dark:bg-mint/15{% else %}bg-surface-line text-ink-700 dark:bg-surface-card dark:text-slate-300{% endif %}">
         <span class="w-1.5 h-1.5 rounded-full {% if market.open %}bg-mint{% else %}bg-ink-500{% endif %}"></span>{{ market.label }}
       </span>
-      <span>{{ market.ist_time }}</span>
+      <span>{{ market.local_time }}</span>
       {% if not market.open and market.next_open %}<span>Next open: {{ market.next_open }} ({{ market.next_open_in }})</span>{% endif %}
       {% if offline %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20">Offline demo data</span>{% endif %}
       {% if llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20" title="News is classified by the configured AI model using structured output">AI news scoring</span>{% else %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card" title="No ANTHROPIC_API_KEY set: headlines are scored with a built-in financial keyword dictionary. Add a key in .env to enable AI classification.">Keyword news scoring</span>{% endif %}
@@ -75,7 +82,7 @@
   <footer class="max-w-6xl mx-auto px-4 py-8 text-xs text-ink-500 leading-relaxed">
     <p class="font-medium text-ink-700 dark:text-slate-300 mb-1">Market risk disclaimer</p>
     <p>{{ disclaimer }}</p>
-    <p class="mt-2">Prices: {% if quote_source == "offline" %}synthetic demo data{% elif quote_source == "yfinance" %}Yahoo Finance (may be delayed up to 15 minutes){% else %}official NSE quotes during market hours, with Yahoo Finance as fallback (which may be delayed){% endif %}. News: Google News and Yahoo Finance RSS, cached for 30 minutes. NSE trades 09:15-15:30 IST on trading days; outside those hours the last close is shown and the next open time appears above.</p>
+    <p class="mt-2">Prices: {% if quote_source == "offline" %}synthetic demo data{% elif profile.live_quotes and quote_source != "yfinance" %}official {{ profile.exchange.split(" /")[0] }} quotes during market hours, with Yahoo Finance as fallback (which may be delayed){% else %}Yahoo Finance (may be delayed up to 15 minutes){% endif %}. News: Google News and Yahoo Finance RSS, cached for 30 minutes. {{ profile.exchange }} trades {{ market.hours }} {{ market.tz }} on trading days; outside those hours the last close is shown and the next open time appears above.</p>
     {% if license %}<p class="mt-2">Licensed to {{ license.name }} on device {{ license.device_id }}{% if license.expires %} until {{ license.expires }}{% endif %}.</p>{% else %}<p class="mt-2">Device licensing: off (open access). Set LICENSE_PUBLIC_KEY to restrict this app to approved devices. Device ID of this installation: <span class="num">{{ device_id }}</span></p>{% endif %}
   </footer>
   <script src="/static/app.js?v={{ asset_version }}"></script>

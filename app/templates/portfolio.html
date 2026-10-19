@@ -4,8 +4,8 @@
 {% block title %}Portfolio - {{ app_name }}{% endblock %}
 {% block content %}
 <section class="grid grid-cols-2 md:grid-cols-5 gap-4">
-  {{ m.stat("Invested", m.money(h.invested, 0)) }}
-  {{ m.stat("Current value", m.money(h.market_value, 0)) }}
+  {{ m.stat("Invested", m.money(h.invested, 0, cur), "", "all holdings, in their own currencies" if h.mixed_currencies else "") }}
+  {{ m.stat("Current value", m.money(h.market_value, 0, cur)) }}
   {{ m.stat("Net P&L", m.signed(h.net_pnl, "", 0), m.signed(h.net_pnl_pct, "%")) }}
   {{ m.stat("Day's change", m.signed(h.day_change, "", 0), m.signed(h.day_change_pct, "%")) }}
   <div class="card p-4">
@@ -28,9 +28,9 @@
       <tr>
         <td><a href="/stock/{{ r.symbol }}" class="font-medium text-ink-900 dark:text-white hover:text-indigo">{{ r.symbol }}</a><p class="text-xs text-ink-500">{{ r.name }} &middot; since {{ r.buy_date }}</p>{% if r.error %}<p class="text-xs text-crimson-600">{{ r.error }}</p>{% endif %}</td>
         <td class="text-right num">{{ "{:g}".format(r.quantity) }}</td>
-        <td class="text-right">{{ m.money(r.buy_price) }}</td>
-        <td class="text-right">{{ m.money(r.ltp) }}{% if r.is_stale %}<p class="text-[10px] text-amber-600">prev close</p>{% endif %}</td>
-        <td class="text-right">{{ m.money(r.market_value, 0) }}</td>
+        <td class="text-right">{{ m.money(r.buy_price, 2, cur_for(r.symbol)) }}</td>
+        <td class="text-right">{{ m.money(r.ltp, 2, cur_for(r.symbol)) }}{% if r.is_stale %}<p class="text-[10px] text-amber-600">prev close</p>{% endif %}</td>
+        <td class="text-right">{{ m.money(r.market_value, 0, cur_for(r.symbol)) }}</td>
         <td class="text-right">{{ m.signed(r.pnl, "", 0) }}<br><span class="text-xs">{{ m.signed(r.pnl_pct, "%") }}</span></td>
         <td class="text-right">{{ m.signed(r.day_change, "", 0) }}<br><span class="text-xs">{{ m.signed(r.day_change_pct, "%") }}</span></td>
         <td>{{ m.signed(r.sentiment_score) }}<br>{{ m.bias_pill(r.momentum_bias) if r.momentum_bias != "n/a" else "" }}</td>
@@ -49,7 +49,7 @@
   <h2 class="font-semibold text-ink-900 dark:text-white">Log a holding</h2>
   <form method="post" action="/portfolio/add" class="mt-4 grid md:grid-cols-5 gap-3 items-end">
     <label class="text-sm md:col-span-2"><span class="text-xs text-ink-500">Company / ticker</span><span class="relative block"><input class="input mt-1" name="query" required data-suggest value="{{ request.query_params.get('q', '') }}" placeholder="e.g. HDFC Bank"></span></label>
-    <label class="text-sm"><span class="text-xs text-ink-500">Buy price (&#8377;)</span><input class="input mt-1" name="buy_price" type="number" step="0.05" min="0.05" required></label>
+    <label class="text-sm"><span class="text-xs text-ink-500">Buy price ({{ cur }})</span><input class="input mt-1" name="buy_price" type="number" step="0.05" min="0.05" required></label>
     <label class="text-sm"><span class="text-xs text-ink-500">Quantity</span><input class="input mt-1" name="quantity" type="number" step="1" min="1" inputmode="numeric" required></label>
     <label class="text-sm"><span class="text-xs text-ink-500">Buy date</span><input class="input mt-1" name="buy_date" type="date" max="{{ today }}" value="{{ today }}" required></label>
     <div class="md:col-span-5"><button class="btn-primary">Add holding</button></div>

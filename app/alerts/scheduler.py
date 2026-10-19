@@ -126,7 +126,9 @@ async def poll_spotlight(entry_id: int, force: bool = False) -> dict:
             return {"status": "disabled"}
         symbol, email = entry.symbol, entry.email
 
-    if not force and not is_market_open():
+    from app.markets import market_for_symbol
+
+    if not force and not is_market_open(market=market_for_symbol(symbol)):
         return {"status": "market-closed"}
 
     try:
@@ -185,7 +187,8 @@ async def poll_spotlight(entry_id: int, force: bool = False) -> dict:
         html = render_alert({
             "kind": kind, "subject": subject, "entry": entry_data, "quote": analysis.quote.as_dict(),
             "technicals": analysis.technicals.as_dict(), "sentiment": analysis.sentiment.model_dump(),
-            "matrix": analysis.matrix[:8], "market": market_status(), "extra": extra,
+            "matrix": analysis.matrix[:8], "market": market_status(market=market_for_symbol(symbol)), "extra": extra,
+            "cur": analysis.quote.currency_symbol,
             "generated_at": now.strftime("%d %b %Y %H:%M UTC"),
         })
         delivered, detail = await send_html_email(email, f"[SnitchofDalal] {subject}", html)

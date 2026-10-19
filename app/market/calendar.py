@@ -1,32 +1,36 @@
-"""NSE trading calendar: market hours, sessions, holidays (configured + auto-fetched)."""
+"""Trading calendars per market: hours, sessions, holidays (configured, static, or fetched)."""
 from __future__ import annotations
 
 import logging
 import threading
 import time
-from datetime import date, datetime, time as dtime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
+from app.markets import DEFAULT_MARKET, MarketProfile, get_market
 
 log = logging.getLogger(__name__)
-IST = ZoneInfo("Asia/Kolkata")
-PRE_OPEN_START = dtime(9, 0)
-MARKET_OPEN = dtime(9, 15)
-MARKET_CLOSE = dtime(15, 30)
-POST_CLOSE_END = dtime(16, 0)
+IST = ZoneInfo("Asia/Kolkata")   # kept for existing imports
 
-_holiday_cache: dict = {"fetched_at": 0.0, "dates": set(), "attempted": False}
+_holiday_cache: dict[str, dict] = {}
 _lock = threading.Lock()
 HOLIDAY_TTL = 24 * 3600
 
 
+def _profile(market) -> MarketProfile:
+    return market if isinstance(market, MarketProfile) else get_market(market)
+
+
+def now_in(market=DEFAULT_MARKET) -> datetime:
+    return datetime.now(_profile(market).zone)
+
+
 def now_ist() -> datetime:
-    return datetime.now(IST)
+    return now_in("IN")
 
 
 def _fetch_nse_holidays() -> set[str]:
-    """Official NSE capital-market holiday list via nsemine (best effort)."""
     from nsemine.nse import get_holiday_lists
 
     df = get_holiday_lists()
@@ -35,90 +39,96 @@ def _fetch_nse_holidays() -> set[str]:
     return {d.strftime("%Y-%m-%d") for d in df["date"].dropna()}
 
 
-def holidays(refresh: bool = False) -> set[str]:
-    """Configured holidays plus the NSE list (fetched at most once a day, never in offline mode)."""
+def holidays(market=DEFAULT_MARKET, refresh: bool = False) -> set[str]:
+    """Configured holidays (MARKET_HOLIDAYS for India, MARKET_HOLIDAYS_ZA for South Africa) plus the
+    profile's static list, plus NSE's official list fetched at most once a day (India, online only)."""
+    p = _profile(market)
     settings = get_settings()
-    configured = settings.holiday_set
-    if settings.offline_mode:
-        return configured
+    configured = settings.holiday_set if p.id == "IN" else settings.holiday_set_za
+    static = {d for days in p.static_holidays.values() for d in days}
+    if p.id != "IN" or settings.offline_mode:
+        return configured | static
     now = time.monotonic()
     with _lock:
-        fresh = _holiday_cache["fetched_at"] and now - _holiday_cache["fetched_at"] < HOLIDAY_TTL
+        entry = _holiday_cache.setdefault(p.id, {"fetched_at": 0.0, "dates": set()})
+        fresh = entry["fetched_at"] and now - entry["fetched_at"] < HOLIDAY_TTL
         if refresh or not fresh:
             try:
-                _holiday_cache["dates"] = _fetch_nse_holidays()
-                _holiday_cache["fetched_at"] = now
+                entry["dates"] = _fetch_nse_holidays()
+                entry["fetched_at"] = now
             except Exception as exc:
                 log.debug("NSE holiday fetch failed: %s", exc)
-                # retry no sooner than an hour later
-                _holiday_cache["fetched_at"] = now - HOLIDAY_TTL + 3600
-        return configured | set(_holiday_cache["dates"])
+                entry["fetched_at"] = now - HOLIDAY_TTL + 3600
+        return configured | static | set(entry["dates"])
 
 
-def is_trading_day(d: date, hol: set[str] | None = None) -> bool:
+def is_trading_day(d: date, hol: set[str] | None = None, market=DEFAULT_MARKET) -> bool:
     if d.weekday() >= 5:
         return False
-    return d.strftime("%Y-%m-%d") not in (hol if hol is not None else holidays())
+    return d.strftime("%Y-%m-%d") not in (hol if hol is not None else holidays(market))
 
 
-def is_market_open(at: datetime | None = None, holidays_override: set[str] | None = None) -> bool:
-    at = (at or now_ist()).astimezone(IST)
-    if not is_trading_day(at.date(), holidays_override):
+def is_market_open(at: datetime | None = None, holidays_override: set[str] | None = None, market=DEFAULT_MARKET) -> bool:
+    p = _profile(market)
+    at = (at or now_in(p)).astimezone(p.zone)
+    if not is_trading_day(at.date(), holidays_override, p):
         return False
-    return MARKET_OPEN <= at.time() <= MARKET_CLOSE
+    return p.open <= at.time() <= p.close
 
 
-def session(at: datetime | None = None) -> str:
+def session(at: datetime | None = None, market=DEFAULT_MARKET) -> str:
     """pre-open | open | post-close | closed"""
-    at = (at or now_ist()).astimezone(IST)
-    if not is_trading_day(at.date()):
+    p = _profile(market)
+    at = (at or now_in(p)).astimezone(p.zone)
+    if not is_trading_day(at.date(), None, p):
         return "closed"
     t = at.time()
-    if PRE_OPEN_START <= t < MARKET_OPEN:
+    if p.pre_open <= t < p.open:
         return "pre-open"
-    if MARKET_OPEN <= t <= MARKET_CLOSE:
+    if p.open <= t <= p.close:
         return "open"
-    if MARKET_CLOSE < t <= POST_CLOSE_END:
+    if p.close < t <= p.post_close:
         return "post-close"
     return "closed"
 
 
-def next_open(at: datetime | None = None) -> datetime:
-    at = (at or now_ist()).astimezone(IST)
-    hol = holidays()
+def next_open(at: datetime | None = None, market=DEFAULT_MARKET) -> datetime:
+    p = _profile(market)
+    at = (at or now_in(p)).astimezone(p.zone)
+    hol = holidays(p)
     candidate = at.date()
-    if not (is_trading_day(candidate, hol) and at.time() < MARKET_OPEN):
+    if not (is_trading_day(candidate, hol, p) and at.time() < p.open):
         candidate += timedelta(days=1)
-        while not is_trading_day(candidate, hol):
+        while not is_trading_day(candidate, hol, p):
             candidate += timedelta(days=1)
-    return datetime.combine(candidate, MARKET_OPEN, tzinfo=IST)
+    return datetime.combine(candidate, p.open, tzinfo=p.zone)
 
 
-def market_status(at: datetime | None = None) -> dict:
-    at = (at or now_ist()).astimezone(IST)
-    sess = session(at)
+def market_status(at: datetime | None = None, market=DEFAULT_MARKET) -> dict:
+    p = _profile(market)
+    at = (at or now_in(p)).astimezone(p.zone)
+    sess = session(at, p)
     open_ = sess == "open"
+    tzname = at.strftime("%Z") or p.tz
+    hours = f"{p.open:%H:%M}-{p.close:%H:%M}"
     if sess == "open":
-        label = "Market open"
+        label = f"{p.exchange} open"
     elif sess == "pre-open":
-        label = "Pre-open session (09:00-09:15) - showing previous close"
+        label = f"Pre-open session - showing previous close"
     elif sess == "post-close":
-        label = "Market closed - showing today's close"
-    elif not is_trading_day(at.date()):
-        label = "Market closed (weekend / NSE holiday)"
-    elif at.time() < PRE_OPEN_START:
+        label = f"{p.exchange} closed - showing today's close"
+    elif not is_trading_day(at.date(), None, p):
+        label = f"{p.exchange} closed (weekend / holiday)"
+    elif at.time() < p.pre_open:
         label = "Pre-market - showing previous close"
     else:
-        label = "Market closed - showing today's close"
-    nxt = next_open(at)
+        label = f"{p.exchange} closed - showing today's close"
+    nxt = next_open(at, p)
     delta = nxt - at
-    hours = int(delta.total_seconds() // 3600)
-    mins = int(delta.total_seconds() % 3600 // 60)
+    h, m = int(delta.total_seconds() // 3600), int(delta.total_seconds() % 3600 // 60)
     return {
-        "open": open_,
-        "session": sess,
-        "label": label,
-        "ist_time": at.strftime("%d %b %Y, %H:%M IST"),
-        "next_open": nxt.strftime("%a %d %b, %H:%M IST"),
-        "next_open_in": f"{hours}h {mins}m" if not open_ else None,
+        "market": p.id, "exchange": p.exchange, "open": open_, "session": sess, "label": label,
+        "ist_time": at.strftime(f"%d %b %Y, %H:%M {tzname}"), "local_time": at.strftime(f"%d %b %Y, %H:%M {tzname}"),
+        "hours": hours, "tz": tzname,
+        "next_open": nxt.strftime(f"%a %d %b, %H:%M {tzname}"), "next_open_in": f"{h}h {m}m" if not open_ else None,
     }

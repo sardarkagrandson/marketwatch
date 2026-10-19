@@ -16,7 +16,7 @@
         <tr>
           <td style="padding:12px;background:#F8F9FA;border-radius:12px;">
             <div style="font-size:11px;color:#7C7E8C;font-family:Inter,Arial,sans-serif;">Last price{% if quote.is_stale %} (prev close){% endif %}</div>
-            <div style="font-size:24px;font-weight:600;color:#1E222D;">&#8377;{{ "{:,.2f}".format(quote.ltp) }}</div>
+            <div style="font-size:24px;font-weight:600;color:#1E222D;">{{ cur or '&#8377;' }}{{ "{:,.2f}".format(quote.ltp) }}</div>
             <div style="color:{{ '#00B386' if quote.change >= 0 else '#D64545' }};">{{ "%+.2f" | format(quote.change) }} ({{ "%+.2f" | format(quote.change_pct) }}%)</div>
           </td>
           <td style="width:12px;"></td>
@@ -29,7 +29,7 @@
       </table>
 
       {% if kind == "price" %}
-      <p style="margin:16px 0 0;font-size:14px;">Cutoff: <strong>&#8377;{{ "{:,.2f}".format(extra.cutoff_price) }}</strong> ({{ "price at or above" if extra.cutoff_direction == "above" else "price at or below" }}).</p>
+      <p style="margin:16px 0 0;font-size:14px;">Cutoff: <strong>{{ cur or '&#8377;' }}{{ "{:,.2f}".format(extra.cutoff_price) }}</strong> ({{ "price at or above" if extra.cutoff_direction == "above" else "price at or below" }}).</p>
       {% endif %}
 
       <h2 style="margin:20px 0 8px;font-size:14px;color:#1E222D;">Technical summary</h2>

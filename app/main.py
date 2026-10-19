@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.db import get_db, init_db, session_scope
 from app.market.data import chart_series, market_overview, market_status
 from app.market.tickers import known_symbols, resolve_ticker, suggest
+from app.markets import MARKETS, get_market, market_for_symbol
 from app.models import AlertLog, Holding, SpotlightEntry
 from app.portfolio.health import portfolio_health
 from app.schemas import HoldingCreate, ProbabilityRequest, SpotlightCreate, SpotlightUpdate
@@ -31,6 +32,16 @@ log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["cur_for"] = lambda symbol: market_for_symbol(symbol).currency_symbol
+templates.env.globals["market_of"] = lambda symbol: market_for_symbol(symbol)
+
+MARKET_COOKIE = "sod-market"
+
+
+def active_market(request: Request) -> str:
+    """The market the user is browsing: cookie set by the header switch, else the configured default."""
+    mid = (request.cookies.get(MARKET_COOKIE) or get_settings().default_market or "IN").upper()
+    return mid if mid in MARKETS else "IN"
 
 
 def _asset_version() -> str:
@@ -79,14 +90,18 @@ async def license_gate(request: Request, call_next):
 
 def ctx(request: Request, **kwargs) -> dict:
     s = get_settings()
+    profile = get_market(active_market(request))
     return {
         "request": request,
         "app_name": s.app_name,
-        "market": market_status(),
+        "profile": profile,
+        "markets": list(MARKETS.values()),
+        "cur": profile.currency_symbol,
+        "market": market_status(market=profile),
         "offline": s.offline_mode,
         "llm_enabled": s.llm_enabled,
         "smtp_enabled": s.smtp_enabled,
-        "disclaimer": services.DISCLAIMER,
+        "disclaimer": services.disclaimer_for(profile),
         "quote_source": "offline" if s.offline_mode else s.quote_source,
         "license": licensing.license_status() if licensing.licensing_required() else None,
         "device_id": licensing.get_or_create_device_id(),
@@ -102,8 +117,8 @@ def _entry_or_404(db: Session, entry_id: int) -> SpotlightEntry:
     return entry
 
 
-def _create_spotlight(db: Session, payload: SpotlightCreate) -> SpotlightEntry:
-    t = resolve_ticker(payload.query)
+def _create_spotlight(db: Session, payload: SpotlightCreate, market: str = "IN") -> SpotlightEntry:
+    t = resolve_ticker(payload.query, market=market)
     entry = SpotlightEntry(
         symbol=t.symbol, name=t.name, poll_interval_minutes=payload.poll_interval_minutes,
         cutoff_price=payload.cutoff_price, cutoff_direction=payload.cutoff_direction,
@@ -123,8 +138,8 @@ def _safe_schedule(entry: SpotlightEntry) -> None:
         log.warning("could not schedule job for %s: %s", entry.symbol, exc)
 
 
-def _create_holding(db: Session, payload: HoldingCreate) -> Holding:
-    t = resolve_ticker(payload.query)
+def _create_holding(db: Session, payload: HoldingCreate, market: str = "IN") -> Holding:
+    t = resolve_ticker(payload.query, market=market)
     h = Holding(symbol=t.symbol, name=t.name, buy_price=payload.buy_price,
                 quantity=payload.quantity, buy_date=payload.buy_date)
     db.add(h)
@@ -181,13 +196,26 @@ def api_license_deactivate():
 
 
 # ================================================================= HTML pages
+@app.get("/market/{market_id}")
+def switch_market(request: Request, market_id: str, next: str = "/"):
+    """Header switch: remember the chosen market in a cookie and go back."""
+    mid = market_id.upper()
+    if mid not in MARKETS:
+        raise HTTPException(404, "Unknown market")
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    resp = RedirectResponse(target, status_code=303)
+    resp.set_cookie(MARKET_COOKIE, mid, max_age=365 * 24 * 3600, samesite="lax")
+    return resp
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, db: Session = Depends(get_db)):
+    mid = active_market(request)
     spotlight = db.query(SpotlightEntry).order_by(SpotlightEntry.created_at.desc()).limit(6).all()
-    overview = market_overview()
+    overview = market_overview(market=mid)
     return templates.TemplateResponse(
         request, "index.html",
-        ctx(request, spotlight=spotlight, overview=overview, quick=known_symbols()[:16]),
+        ctx(request, spotlight=spotlight, overview=overview, quick=known_symbols(mid)[:16]),
     )
 
 
@@ -200,8 +228,9 @@ def stock_redirect(q: str = ""):
 
 @app.get("/stock/{query}", response_class=HTMLResponse)
 def stock_page(request: Request, query: str, target: float | None = None, horizon: int | None = None):
+    mid = active_market(request)
     try:
-        analysis = services.analyze(query)
+        analysis = services.analyze(query, market=mid)
     except Exception as exc:
         log.warning("analysis failed for %r: %s", query, exc)
         return templates.TemplateResponse(
@@ -211,7 +240,7 @@ def stock_page(request: Request, query: str, target: float | None = None, horizo
     prob_error = None
     if target and horizon:
         try:
-            _, _, prob = services.probability_for(analysis.ticker.symbol, target, horizon)
+            _, _, prob = services.probability_for(analysis.ticker.symbol, target, horizon, market=mid)
         except ValueError as exc:
             prob_error = str(exc)
     return templates.TemplateResponse(
@@ -233,6 +262,7 @@ def spotlight_page(request: Request, db: Session = Depends(get_db), msg: str | N
 
 @app.post("/spotlight/add")
 def spotlight_add_form(
+    request: Request,
     query: str = Form(...), poll_interval_minutes: int = Form(60), cutoff_price: str = Form(""),
     cutoff_direction: str = Form("above"), email: str = Form(...), db: Session = Depends(get_db),
 ):
@@ -242,7 +272,7 @@ def spotlight_add_form(
             cutoff_price=float(cutoff_price) if cutoff_price.strip() else None,
             cutoff_direction=cutoff_direction, email=email,
         )
-        _create_spotlight(db, payload)
+        _create_spotlight(db, payload, active_market(request))
     except Exception as exc:
         return RedirectResponse(f"/spotlight?msg=Error: {exc}", status_code=303)
     return RedirectResponse("/spotlight?msg=Added to Spotlight", status_code=303)
@@ -289,11 +319,12 @@ def portfolio_page(request: Request, db: Session = Depends(get_db), msg: str | N
 
 @app.post("/portfolio/add")
 def portfolio_add_form(
+    request: Request,
     query: str = Form(...), buy_price: float = Form(...), quantity: float = Form(...),
     buy_date: date = Form(...), db: Session = Depends(get_db),
 ):
     try:
-        _create_holding(db, HoldingCreate(query=query, buy_price=buy_price, quantity=quantity, buy_date=buy_date))
+        _create_holding(db, HoldingCreate(query=query, buy_price=buy_price, quantity=quantity, buy_date=buy_date), active_market(request))
     except Exception as exc:
         return RedirectResponse(f"/portfolio?msg=Error: {exc}", status_code=303)
     return RedirectResponse("/portfolio?msg=Holding added", status_code=303)
@@ -447,11 +478,12 @@ def api_health():
     return {"status": "ok", "offline_mode": s.offline_mode, "llm": s.llm_enabled, "smtp": s.smtp_enabled,
             "quote_source": "offline" if s.offline_mode else s.quote_source,
             "license_required": licensing.licensing_required(),
+            "markets": {mid: market_status(market=mid) for mid in MARKETS},
             "market": market_status(), "scheduler_running": sched.get_scheduler().running}
 
 
 @app.get("/api/chart/{symbol}")
-def api_chart(symbol: str, range: str = "1y", start: date | None = None, end: date | None = None):
+def api_chart(request: Request, symbol: str, range: str = "1y", start: date | None = None, end: date | None = None):
     from datetime import datetime as _dt, time as _time
     from app.market.calendar import IST as _IST
 
@@ -467,36 +499,36 @@ def api_chart(symbol: str, range: str = "1y", start: date | None = None, end: da
         if range not in ("1d", "1w", "1m", "6m", "1y", "all"):
             raise HTTPException(400, "unknown range")
     try:
-        return chart_series(resolve_ticker(symbol).symbol, range, s_dt, e_dt)
+        return chart_series(resolve_ticker(symbol, market=active_market(request)).symbol, range, s_dt, e_dt)
     except Exception as exc:
         raise HTTPException(502, f"Chart data unavailable: {exc}")
 
 
 @app.get("/api/suggest")
-def api_suggest(q: str = "", limit: int = 8):
-    return suggest(q, limit=max(1, min(limit, 20)))
+def api_suggest(request: Request, q: str = "", limit: int = 8, market: str | None = None):
+    return suggest(q, limit=max(1, min(limit, 20)), market=market or active_market(request))
 
 
 @app.get("/api/resolve")
-def api_resolve(q: str):
+def api_resolve(request: Request, q: str, market: str | None = None):
     try:
-        return resolve_ticker(q).as_dict()
+        return resolve_ticker(q, market=market or active_market(request)).as_dict()
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
 
 @app.get("/api/stock/{query}")
-def api_stock(query: str, news: bool = True):
+def api_stock(request: Request, query: str, news: bool = True, market: str | None = None):
     try:
-        return services.analyze(query, include_news=news).as_dict()
+        return services.analyze(query, include_news=news, market=market or active_market(request)).as_dict()
     except Exception as exc:
         raise HTTPException(502, f"Unable to analyse '{query}': {exc}")
 
 
 @app.post("/api/probability")
-def api_probability(payload: ProbabilityRequest):
+def api_probability(request: Request, payload: ProbabilityRequest):
     try:
-        ticker, quote, prob = services.probability_for(payload.query, payload.target_price, payload.horizon_days)
+        ticker, quote, prob = services.probability_for(payload.query, payload.target_price, payload.horizon_days, market=active_market(request))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
@@ -530,8 +562,8 @@ def api_spotlight_list(db: Session = Depends(get_db)):
 
 
 @app.post("/api/spotlight", status_code=201)
-def api_spotlight_create(payload: SpotlightCreate, db: Session = Depends(get_db)):
-    return _entry_dict(_create_spotlight(db, payload))
+def api_spotlight_create(request: Request, payload: SpotlightCreate, db: Session = Depends(get_db)):
+    return _entry_dict(_create_spotlight(db, payload, active_market(request)))
 
 
 @app.patch("/api/spotlight/{entry_id}")
@@ -571,8 +603,8 @@ def api_portfolio(db: Session = Depends(get_db)):
 
 
 @app.post("/api/portfolio", status_code=201)
-def api_portfolio_add(payload: HoldingCreate, db: Session = Depends(get_db)):
-    h = _create_holding(db, payload)
+def api_portfolio_add(request: Request, payload: HoldingCreate, db: Session = Depends(get_db)):
+    h = _create_holding(db, payload, active_market(request))
     return {"id": h.id, "symbol": h.symbol, "name": h.name, "buy_price": h.buy_price,
             "quantity": h.quantity, "buy_date": h.buy_date.isoformat()}
 

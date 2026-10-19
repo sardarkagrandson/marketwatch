@@ -10,6 +10,24 @@ with a toggleable dark mode.
 > Nothing here is investment advice. Equity investments are subject to market
 > risk; consult a SEBI-registered advisor before trading.
 
+## Markets
+
+The app covers two markets behind one switch in the header:
+
+| | India | South Africa |
+|---|---|---|
+| Exchanges | NSE / BSE (`.NS`, `.BO`) | JSE (`.JO`) |
+| Hours | 09:15-15:30 IST | 09:00-17:00 SAST |
+| Prices | NSE live quotes, Yahoo fallback | Yahoo Finance (JSE quotes arrive in cents and are converted to rand) |
+| Indices | NIFTY 50, SENSEX, NIFTY Bank, NIFTY IT | All Share, Top 40, Resources 10, Financials 15 |
+| News | Google News (en-IN) | Google News (en-ZA) |
+| Modules | all, including IPO and mutual funds | stocks, charts, probability, Spotlight, portfolio |
+
+The switch sets a cookie, so each user keeps their choice; `DEFAULT_MARKET` picks the
+starting market for new users. Spotlight and portfolio entries can mix markets: each
+symbol carries its market, alerts poll during that exchange's hours, and amounts show in
+that currency. Adding a market is a new profile in `app/markets.py` plus a symbol map.
+
 ## Features
 
 | Module | What it does |

@@ -21,8 +21,8 @@
 {{ pill(c, {"Earnings": "indigo", "Regulatory/Legal": "warning", "Product/Expansion": "bullish", "Macro/Sector": "neutral", "Management": "neutral", "Other": "neutral"}.get(c, "neutral")) }}
 {%- endmacro %}
 
-{% macro money(v, decimals=2) -%}
-{%- if v is none %}&mdash;{% else %}<span class="num">&#8377;{{ "{:,.{p}f}".format(v, p=decimals) }}</span>{% endif -%}
+{% macro money(v, decimals=2, sym="&#8377;") -%}
+{%- if v is none %}&mdash;{% else %}<span class="num">{{ sym | safe }}{{ "{:,.{p}f}".format(v, p=decimals) }}</span>{% endif -%}
 {%- endmacro %}
 
 {% macro signed(v, suffix="", decimals=2) -%}

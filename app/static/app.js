@@ -155,6 +155,7 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
   var symbol = card.getAttribute("data-symbol");
   var chartBase = card.getAttribute("data-chart-url") || ("/api/chart/" + encodeURIComponent(symbol));
   var defaultRange = card.getAttribute("data-default-range") || "1y";
+  var currency = card.getAttribute("data-currency") || "₹";
   var svg = document.getElementById("price-chart");
   var tip = document.getElementById("chart-tip");
   var empty = document.getElementById("chart-empty");
@@ -172,7 +173,7 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
     for (var k in attrs) e.setAttribute(k, attrs[k]);
     return e;
   }
-  function fmtPrice(v) { return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: v < 100 ? 4 : 2 }); }
+  function fmtPrice(v) { return currency + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: v < 100 ? 4 : 2 }); }
   function fmtTime(ms, intraday, long) {
     var d = new Date(ms);
     var opts = intraday ? { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }
