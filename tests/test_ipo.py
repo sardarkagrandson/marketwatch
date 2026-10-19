@@ -46,7 +46,9 @@ def test_gmp_table_parse_and_match(monkeypatch):
     assert sources.match_gmp(IPOListing(key="V", company="Vedagrid Energy Storage Ltd"), table) == 58.0
     assert sources.match_gmp(IPOListing(key="K", company="Kaveri Foods & Beverages"), table) == -4.0
     assert sources.match_gmp(IPOListing(key="Z", company="Zeta Unrelated"), table) is None
-    assert sources.fetch_gmp_table("") == {}
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "ipo_gmp_url", "")
+    assert sources.fetch_gmp_table() == {}          # empty setting disables the scrape
     # No header row: second rupee figure is the GMP
     R.text = "<table><tr><td>Nimbus Cloud IPO</td><td>₹148</td><td>₹22</td></tr></table>"
     assert sources.fetch_gmp_table("https://example.com/gmp") == {"nimbus cloud": 22.0}
