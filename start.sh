@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MarketWatch one-click start (macOS / Linux). Double-click or run: ./start.sh
+# SnitchofDalal one-click start (macOS / Linux). Double-click or run: ./start.sh
 set -e
 cd "$(dirname "$0")"
 
@@ -19,12 +19,12 @@ if [ ! -f .env ]; then
   echo "Created .env from .env.example (edit it later to add email or AI settings)."
 fi
 
-echo "Starting MarketWatch (first start downloads ~400 MB and can take a few minutes)..."
+echo "Starting SnitchofDalal (first start downloads ~400 MB and can take a few minutes)..."
 # Prefer the prebuilt image; if it is not available, compose builds it locally.
 docker compose pull --ignore-pull-failures --quiet >/dev/null 2>&1 || true
 docker compose up -d
 
-PORT="${MARKETWATCH_PORT:-8000}"
+PORT="${APP_PORT:-8000}"
 URL="http://localhost:${PORT}"
 echo "Waiting for the app to come up..."
 for _ in $(seq 1 60); do
@@ -33,7 +33,7 @@ for _ in $(seq 1 60); do
 done
 
 echo ""
-echo "MarketWatch is running at ${URL}"
+echo "SnitchofDalal is running at ${URL}"
 echo "To stop it: ./stop.sh   |   To see logs: docker compose logs -f"
 if command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1 || true
 elif command -v open >/dev/null 2>&1; then open "$URL" || true; fi

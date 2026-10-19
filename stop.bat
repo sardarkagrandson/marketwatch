@@ -1,6 +1,6 @@
 @echo off
-REM Stops MarketWatch. Your data is kept; double-click start.bat to resume.
+REM Stops SnitchofDalal. Your data is kept; double-click start.bat to resume.
 cd /d "%~dp0"
 docker compose down
-echo MarketWatch stopped. Your watchlist and portfolio are saved.
+echo SnitchofDalal stopped. Your watchlist and portfolio are saved.
 pause

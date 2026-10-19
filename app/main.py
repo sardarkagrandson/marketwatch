@@ -9,16 +9,17 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app import services
+from app import licensing, services
 from app.alerts import scheduler as sched
 from app.config import get_settings
 from app.db import get_db, init_db, session_scope
 from app.market.data import market_status
-from app.market.tickers import known_symbols, resolve_ticker
+from app.market.tickers import known_symbols, resolve_ticker, suggest
 from app.models import AlertLog, Holding, SpotlightEntry
 from app.portfolio.health import portfolio_health
 from app.schemas import HoldingCreate, ProbabilityRequest, SpotlightCreate, SpotlightUpdate
@@ -33,7 +34,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    if os.environ.get("MARKETWATCH_NO_SCHEDULER") != "1":
+    if os.environ.get("SNITCH_NO_SCHEDULER") != "1":
         try:
             sched.start_scheduler()
         except Exception as exc:  # scheduler is optional for the UI
@@ -42,8 +43,23 @@ async def lifespan(app: FastAPI):
     sched.shutdown_scheduler()
 
 
-app = FastAPI(title="MarketWatch", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="SnitchofDalal", version="0.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+_LICENSE_EXEMPT = ("/activate", "/static/", "/api/health", "/api/license", "/favicon.ico")
+
+
+@app.middleware("http")
+async def license_gate(request: Request, call_next):
+    """Block every page and API call until this device holds a valid licence."""
+    path = request.url.path
+    if licensing.licensing_required() and not path.startswith(_LICENSE_EXEMPT):
+        status = licensing.license_status()
+        if not status["active"]:
+            if path.startswith("/api/"):
+                return JSONResponse(status_code=403, content={"detail": "Device not activated", "license": status})
+            return RedirectResponse("/activate", status_code=303)
+    return await call_next(request)
 
 
 def ctx(request: Request, **kwargs) -> dict:
@@ -56,6 +72,8 @@ def ctx(request: Request, **kwargs) -> dict:
         "llm_enabled": s.llm_enabled,
         "smtp_enabled": s.smtp_enabled,
         "disclaimer": services.DISCLAIMER,
+        "quote_source": "offline" if s.offline_mode else s.quote_source,
+        "license": licensing.license_status() if licensing.licensing_required() else None,
         **kwargs,
     }
 
@@ -95,6 +113,54 @@ def _create_holding(db: Session, payload: HoldingCreate) -> Holding:
     db.add(h)
     db.flush()
     return h
+
+
+# ================================================================= activation
+@app.get("/activate", response_class=HTMLResponse)
+def activate_page(request: Request):
+    status = licensing.license_status(force=True)
+    if not licensing.licensing_required():
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "activate.html", ctx(request, status=status, first_visit=True, token=None))
+
+
+@app.post("/activate", response_class=HTMLResponse)
+def activate_submit(request: Request, token: str = Form(...)):
+    if not licensing.licensing_required():
+        return RedirectResponse("/", status_code=303)
+    try:
+        licensing.activate(token)
+    except licensing.LicenseError as exc:
+        status = licensing.license_status(force=True)
+        status["error"] = str(exc)
+        return templates.TemplateResponse(
+            request, "activate.html", ctx(request, status=status, first_visit=False, token=token), status_code=400
+        )
+    return RedirectResponse("/?msg=Device activated", status_code=303)
+
+
+class LicenseActivate(BaseModel):
+    token: str
+
+
+@app.get("/api/license")
+def api_license():
+    return licensing.license_status(force=True)
+
+
+@app.post("/api/license")
+def api_license_activate(payload: LicenseActivate):
+    if not licensing.licensing_required():
+        return licensing.license_status()
+    try:
+        return licensing.activate(payload.token)
+    except licensing.LicenseError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/license")
+def api_license_deactivate():
+    return licensing.deactivate()
 
 
 # ================================================================= HTML pages
@@ -218,7 +284,14 @@ def portfolio_delete(holding_id: int, db: Session = Depends(get_db)):
 def api_health():
     s = get_settings()
     return {"status": "ok", "offline_mode": s.offline_mode, "llm": s.llm_enabled, "smtp": s.smtp_enabled,
+            "quote_source": "offline" if s.offline_mode else s.quote_source,
+            "license_required": licensing.licensing_required(),
             "market": market_status(), "scheduler_running": sched.get_scheduler().running}
+
+
+@app.get("/api/suggest")
+def api_suggest(q: str = "", limit: int = 8):
+    return suggest(q, limit=max(1, min(limit, 20)))
 
 
 @app.get("/api/resolve")

@@ -1,4 +1,4 @@
-# MarketWatch - Indian Stock Market Sentiment & Technical Intelligence
+# SnitchofDalal - Indian Stock Market Sentiment & Technical Intelligence
 
 A FastAPI application for NSE / BSE equities that combines live market data,
 technical indicators, a structured news-sentiment matrix, a statistical cutoff
@@ -14,8 +14,9 @@ with a toggleable dark mode.
 
 | Module | What it does |
 |---|---|
-| Ticker resolution | Accepts names or symbols (`Tata Motors`, `TATAMOTORS.NS`, `RELIANCE.BO`). Bundled map of ~175 NSE companies with aliases + fuzzy matching, Yahoo search fallback. |
-| Market data engine | LTP, previous close, day range, 52-week range, volume via `yfinance`. Flags prices as previous-session closes outside 09:15-15:30 IST. In-memory TTL cache. |
+| Ticker resolution | Accepts names or symbols (`Tata Motors`, `TATAMOTORS.NS`, `RELIANCE.BO`). Bundled map of ~175 NSE companies with aliases + fuzzy matching, Yahoo search fallback. Every search box offers type-ahead suggestions (`/api/suggest`). |
+| Market data engine | Official NSE quote (via `nsemine`) during market hours with `yfinance` as fallback and for history; LTP, previous close, day range, 52-week range, volume. Session-aware status (pre-open, open, post-close, closed), NSE holiday list fetched daily, next-open countdown. In-memory TTL cache. |
+| Device licensing | Optional. Ed25519-signed licence keys bound to a per-installation Device ID, verified offline. Unlicensed devices only see the activation screen. |
 | Technicals | 14-day RSI (Wilder), 20/50/200 EMA, 20-day ATR (Wilder), annualised volatility, plus labelled setups / breakdowns. Computed natively with pandas. |
 | News & sentiment matrix | Google News RSS + Yahoo Finance RSS for the past 7 days, deduplicated, cached in SQLite. Each article is classified (category, sentiment, impact -1..+1, reasoning) by Claude via structured output (Pydantic), with a keyword heuristic fallback when no API key is set. Aggregated into a recency-weighted score and momentum bias. |
 | Cutoff probability | `P(touch) = 2 * [1 - Phi(|ln(P_target/P_0)| / (sigma * sqrt(T)))]` using 1-year realised volatility, with the assumptions stated on screen. |
@@ -40,7 +41,7 @@ docker compose up -d     # builds locally, or pulls ghcr.io/sardarkagrandson/mar
 ```
 
 Data (watchlist, portfolio, caches, saved alert emails) lives in the
-`marketwatch-data` Docker volume, so it survives restarts and updates.
+`snitchofdalal-data` Docker volume, so it survives restarts and updates.
 
 ### Option B - Python
 
@@ -72,13 +73,51 @@ classifier is used, and alert emails are written to `data/outbox/*.html`.
 | `SMTP_HOST/PORT/USERNAME/PASSWORD/USE_TLS/FROM` | Email delivery. When `SMTP_HOST` is empty, alerts are saved to `data/outbox/`. |
 | `MARKET_HOLIDAYS` | Comma-separated `YYYY-MM-DD` dates on which polling is skipped. |
 | `QUOTE_CACHE_SECONDS`, `HISTORY_CACHE_SECONDS`, `NEWS_CACHE_SECONDS` | Cache TTLs (defaults 60 / 900 / 1800). |
-| `DATA_DIR` | Location of `marketwatch.db` (app data) and `jobs.db` (scheduler). |
+| `DATA_DIR` | Location of `snitchofdalal.db` (app data) and `jobs.db` (scheduler). |
+
+## Restricting the app to approved devices
+
+Licensing is off until you set `LICENSE_PUBLIC_KEY`. To turn it on:
+
+```bash
+python tools/license_admin.py keygen            # creates license_private.pem, prints the public key
+# paste LICENSE_PUBLIC_KEY=... into .env.example (so every installation gets it), rebuild the image
+```
+
+Each installation then shows a **Device ID** (for example `7F3A-91C2-0B5E-44D1`) on its
+activation screen. The user sends it to you, and you issue a key:
+
+```bash
+python tools/license_admin.py issue --device-id 7F3A-91C2-0B5E-44D1 --name "Ravi K" --days 365
+python tools/license_admin.py list              # every key you have issued (issued_licenses.csv)
+```
+
+The user pastes the key once; the app verifies the signature, the Device ID and the
+expiry locally and stores it. Keys for other devices, tampered keys and expired keys are
+rejected. Keep `license_private.pem` secret and backed up: without it you cannot issue
+keys, and anyone holding it can.
+
+What this does and does not do:
+
+- It stops the app being copied and used on a device you have not approved, and lets you
+  time-limit access (re-issue on renewal). Issue shorter terms if you expect to revoke.
+- Keys cannot be revoked before expiry without an online check; the design keeps the app
+  fully offline. An online revocation list can be added later if needed.
+- The Device ID lives in the Docker data volume. Deleting the volume creates a new ID and
+  needs a new key; copying the volume copies the activation.
+- The source code runs on the user's machine, so a determined, technical user could edit
+  it to remove the check. This protects against casual sharing, not against attackers.
+
+By default the Docker port is bound to `127.0.0.1`, so only the computer running it can
+open the app. Set `BIND_HOST=0.0.0.0` to allow other devices on the same network.
 
 ## JSON API
 
 | Method & path | Description |
 |---|---|
+| `GET /api/suggest?q=` | Type-ahead suggestions (symbol, name, exchange). |
 | `GET /api/resolve?q=` | Resolve a name/symbol to a ticker. |
+| `GET/POST/DELETE /api/license` | Licence status, activation, deactivation (only when licensing is enabled). |
 | `GET /api/stock/{query}` | Full analysis: quote, technicals, sentiment summary, news matrix, sparkline. |
 | `POST /api/probability` | `{query, target_price, horizon_days}` -> touch probability and assumptions. |
 | `GET/POST /api/spotlight`, `PATCH/DELETE /api/spotlight/{id}`, `POST /api/spotlight/{id}/poll` | Watchlist CRUD and on-demand poll. |
@@ -113,8 +152,14 @@ keys are required.
 
 ## Notes and limitations
 
-- Market data is delayed (Yahoo Finance). NSE holidays are not bundled; set
-  `MARKET_HOLIDAYS` to skip polling on those days.
+- Price sources: with `QUOTE_SOURCE=auto` the app asks NSE's public quote endpoint first
+  (official LTP, no 15-minute delay) and falls back to Yahoo Finance when NSE is
+  unreachable, rate-limited or blocks the client's IP (NSE sometimes blocks non-Indian
+  addresses). History and indicators always use Yahoo Finance daily bars. The NSE path
+  is a public, undocumented endpoint and may change without notice.
+- Outside 09:15-15:30 IST no exchange produces new prices, so the last close is shown
+  and labelled; the status bar shows the next opening time. The official NSE holiday
+  list is fetched once a day and merged with `MARKET_HOLIDAYS`.
 - The `ta` library is listed as optional: the same RSI / EMA / ATR definitions are
   implemented in `app/market/indicators.py` so the app runs on Python 3.13 where
   `ta` currently fails to build.

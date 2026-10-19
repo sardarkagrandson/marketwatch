@@ -7,3 +7,5 @@ data/outbox/
 .pytest_cache/
 *.egg-info/
 .venv/
+license_private.pem
+issued_licenses.csv

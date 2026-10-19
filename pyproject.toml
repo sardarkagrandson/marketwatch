@@ -1,5 +1,5 @@
 [project]
-name = "marketwatch"
+name = "snitchofdalal"
 version = "0.1.0"
 description = "Indian stock market sentiment and technical intelligence tool"
 requires-python = ">=3.11"

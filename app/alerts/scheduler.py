@@ -182,7 +182,7 @@ async def poll_spotlight(entry_id: int, force: bool = False) -> dict:
             "matrix": analysis.matrix[:8], "market": market_status(), "extra": extra,
             "generated_at": now.strftime("%d %b %Y %H:%M UTC"),
         })
-        delivered, detail = await send_html_email(email, f"[MarketWatch] {subject}", html)
+        delivered, detail = await send_html_email(email, f"[SnitchofDalal] {subject}", html)
         with session_scope() as s:
             s.add(AlertLog(spotlight_id=spotlight_id, symbol=symbol, kind=kind, subject=subject,
                            recipient=email, delivered=delivered, detail=detail))

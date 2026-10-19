@@ -42,15 +42,15 @@
   <header class="bg-surface dark:bg-surface-card border-b border-surface-line dark:border-surface-darkline sticky top-0 z-20">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
       <a href="/" class="flex items-center gap-2 shrink-0">
-        <span class="w-8 h-8 rounded-xl bg-mint flex items-center justify-center text-white font-bold">M</span>
+        <span class="w-8 h-8 rounded-xl bg-mint flex items-center justify-center text-white font-bold">S</span>
         <span class="font-semibold text-ink-900 dark:text-white hidden sm:inline">{{ app_name }}</span>
       </a>
       <form action="/stock" method="get" class="flex-1 max-w-xl">
-        <label class="relative block">
-          <span class="absolute inset-y-0 left-3 flex items-center text-ink-500">
+        <label class="relative block z-30">
+          <span class="absolute inset-y-0 left-3 flex items-center text-ink-500 pointer-events-none">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           </span>
-          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search NSE / BSE stocks, e.g. Tata Motors or INFY.NS"
+          <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search NSE / BSE stocks, e.g. Tata Motors or INFY.NS" data-suggest data-submit="1"
                  class="w-full h-10 pl-9 pr-3 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-sm text-ink-900 dark:text-white placeholder:text-ink-500 focus:outline-none focus:ring-2 focus:ring-mint/40">
         </label>
       </form>
@@ -77,6 +77,7 @@
         <span class="w-1.5 h-1.5 rounded-full {% if market.open %}bg-mint{% else %}bg-ink-500{% endif %}"></span>{{ market.label }}
       </span>
       <span>{{ market.ist_time }}</span>
+      {% if not market.open and market.next_open %}<span>Next open: {{ market.next_open }} ({{ market.next_open_in }})</span>{% endif %}
       {% if offline %}<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo dark:bg-indigo/20">Offline demo data</span>{% endif %}
       {% if not llm_enabled %}<span class="px-2.5 py-1 rounded-full bg-surface-line dark:bg-surface-card">Heuristic sentiment (no LLM key)</span>{% endif %}
     </div>
@@ -89,7 +90,8 @@
   <footer class="max-w-6xl mx-auto px-4 py-8 text-xs text-ink-500 leading-relaxed">
     <p class="font-medium text-ink-700 dark:text-slate-300 mb-1">Market risk disclaimer</p>
     <p>{{ disclaimer }}</p>
-    <p class="mt-2">Data via Yahoo Finance (delayed) and public news RSS feeds. Prices outside 09:15-15:30 IST are previous-session closes.</p>
+    <p class="mt-2">Prices: {% if quote_source == "offline" %}synthetic demo data{% elif quote_source == "yfinance" %}Yahoo Finance (may be delayed up to 15 minutes){% else %}official NSE quotes during market hours, with Yahoo Finance as fallback (which may be delayed){% endif %}. News: Google News and Yahoo Finance RSS, cached for 30 minutes. NSE trades 09:15-15:30 IST on trading days; outside those hours the last close is shown and the next open time appears above.</p>
+    {% if license %}<p class="mt-2">Licensed to {{ license.name }} on device {{ license.device_id }}{% if license.expires %} until {{ license.expires }}{% endif %}.</p>{% endif %}
   </footer>
   <script src="/static/app.js"></script>
 </body>

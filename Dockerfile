@@ -1,5 +1,5 @@
-# MarketWatch - Indian stock market sentiment & technical intelligence
-# Build:  docker build -t marketwatch .
+# SnitchofDalal - Indian stock market sentiment & technical intelligence
+# Build:  docker build -t snitchofdalal .
 # Run:    docker compose up -d   (see docker-compose.yml)
 FROM python:3.12-slim
 
@@ -19,9 +19,9 @@ COPY app ./app
 COPY pyproject.toml .
 
 # Run as an unprivileged user; /data is the persistent volume for SQLite + outbox.
-RUN useradd --create-home --uid 10001 marketwatch \
-    && mkdir -p /data && chown -R marketwatch:marketwatch /data /app
-USER marketwatch
+RUN useradd --create-home --uid 10001 snitchofdalal \
+    && mkdir -p /data && chown -R snitchofdalal:snitchofdalal /data /app
+USER snitchofdalal
 VOLUME ["/data"]
 
 EXPOSE 8000

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 LOOKBACK_DAYS = 7
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"
 YAHOO_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=IN&lang=en-IN"
-USER_AGENT = "Mozilla/5.0 (compatible; MarketWatchBot/0.1; +https://example.com)"
+USER_AGENT = "Mozilla/5.0 (compatible; SnitchofDalalBot/0.1; +https://example.com)"
 
 
 def article_id(headline: str, link: str) -> str:

@@ -40,3 +40,76 @@
     });
   });
 })();
+
+// ---- Ticker type-ahead -----------------------------------------------------
+// Any <input data-suggest> gets a dropdown fed by /api/suggest. data-submit="1" submits
+// the form on selection; otherwise the chosen symbol is written into the input.
+(function () {
+  var inputs = document.querySelectorAll("input[data-suggest]");
+  if (!inputs.length) return;
+  inputs.forEach(function (input) {
+    var wrap = input.parentElement;
+    if (getComputedStyle(wrap).position === "static") wrap.style.position = "relative";
+    var box = document.createElement("div");
+    box.className = "suggest";
+    box.hidden = true;
+    wrap.appendChild(box);
+    var items = [], active = -1, timer = null, lastQ = "", ctrl = null;
+
+    function close() { box.hidden = true; box.innerHTML = ""; items = []; active = -1; }
+    function choose(i) {
+      var it = items[i]; if (!it) return;
+      input.value = it.symbol;
+      close();
+      if (input.getAttribute("data-submit") === "1" && input.form) input.form.submit();
+    }
+    function render() {
+      if (!items.length) { close(); return; }
+      box.innerHTML = items.map(function (it, i) {
+        return '<button type="button" class="suggest-item' + (i === active ? ' is-active' : '') + '" data-i="' + i + '">' +
+          '<span class="suggest-name">' + esc(it.name) + '</span>' +
+          '<span class="suggest-sym num">' + esc(it.base_symbol) + ' <small>' + esc(it.exchange) + '</small></span></button>';
+      }).join("");
+      box.hidden = false;
+    }
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
+    function fetchSuggest(q) {
+      if (ctrl) ctrl.abort();
+      ctrl = new AbortController();
+      fetch("/api/suggest?q=" + encodeURIComponent(q), { signal: ctrl.signal })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (data) { if (q !== lastQ) return; items = data; active = -1; render(); })
+        .catch(function () {});
+    }
+    input.addEventListener("input", function () {
+      var q = input.value.trim(); lastQ = q;
+      clearTimeout(timer);
+      if (q.length < 1) { close(); return; }
+      timer = setTimeout(function () { fetchSuggest(q); }, 120);
+    });
+    input.addEventListener("keydown", function (ev) {
+      if (box.hidden) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); active = (active + 1) % items.length; render(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); active = (active - 1 + items.length) % items.length; render(); }
+      else if (ev.key === "Enter" && active >= 0) { ev.preventDefault(); choose(active); }
+      else if (ev.key === "Escape") { close(); }
+    });
+    box.addEventListener("mousedown", function (ev) {
+      var btn = ev.target.closest(".suggest-item"); if (!btn) return;
+      ev.preventDefault(); choose(parseInt(btn.getAttribute("data-i"), 10));
+    });
+    input.addEventListener("blur", function () { setTimeout(close, 150); });
+    input.setAttribute("autocomplete", "off");
+  });
+})();
+
+// ---- Copy buttons ------------------------------------------------------------
+document.querySelectorAll("[data-copy]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var el = document.querySelector(btn.getAttribute("data-copy"));
+    if (!el || !navigator.clipboard) return;
+    navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+      var t = btn.textContent; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = t; }, 1500);
+    });
+  });
+});

@@ -11,8 +11,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, asdict
-from datetime import datetime, time as dtime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -20,38 +19,10 @@ import pandas as pd
 from app.config import get_settings
 
 log = logging.getLogger(__name__)
-IST = ZoneInfo("Asia/Kolkata")
-MARKET_OPEN = dtime(9, 15)
-MARKET_CLOSE = dtime(15, 30)
 
 
 # ---------------------------------------------------------------- market hours
-def now_ist() -> datetime:
-    return datetime.now(IST)
-
-
-def is_market_open(at: datetime | None = None, holidays: set[str] | None = None) -> bool:
-    at = (at or now_ist()).astimezone(IST)
-    if at.weekday() >= 5:
-        return False
-    hol = holidays if holidays is not None else get_settings().holiday_set
-    if at.strftime("%Y-%m-%d") in hol:
-        return False
-    return MARKET_OPEN <= at.time() <= MARKET_CLOSE
-
-
-def market_status(at: datetime | None = None) -> dict:
-    at = (at or now_ist()).astimezone(IST)
-    open_ = is_market_open(at)
-    if open_:
-        label = "Market open"
-    elif at.weekday() >= 5 or at.strftime("%Y-%m-%d") in get_settings().holiday_set:
-        label = "Market closed (holiday / weekend)"
-    elif at.time() < MARKET_OPEN:
-        label = "Pre-market - showing previous close"
-    else:
-        label = "Market closed - showing last close"
-    return {"open": open_, "label": label, "ist_time": at.strftime("%d %b %Y, %H:%M IST")}
+from app.market.calendar import IST, is_market_open, market_status, now_ist  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------- cache
@@ -149,6 +120,46 @@ class YFinanceProvider:
         return build_quote(symbol, name, history, info, source=self.name)
 
 
+class NSELiveProvider(YFinanceProvider):
+    """Official NSE quote (via nsemine) layered on Yahoo history; falls back to Yahoo."""
+
+    name = "nse"
+
+    def quote(self, symbol: str, history: pd.DataFrame) -> Quote:
+        base = symbol.rsplit(".", 1)[0]
+        if not symbol.upper().endswith(".NS"):
+            return super().quote(symbol, history)
+        info = None
+        try:
+            from nsemine.live import get_stock_live_quotes
+
+            raw = get_stock_live_quotes(base)
+            if raw and raw.get("close"):
+                ts = raw.get("datetime")
+                info = {
+                    "last_price": raw.get("close"),
+                    "previous_close": raw.get("previous_close"),
+                    "day_high": raw.get("high"),
+                    "day_low": raw.get("low"),
+                    "year_high": raw.get("year_high"),
+                    "year_low": raw.get("year_low"),
+                    "last_volume": raw.get("volume"),
+                    "open": raw.get("open"),
+                    "currency": "INR",
+                    "last_update": ts.replace(tzinfo=IST).isoformat() if isinstance(ts, datetime) else None,
+                    "name": raw.get("name"),
+                }
+        except Exception as exc:  # blocked IP, NSE outage, library change
+            log.debug("NSE live quote failed for %s: %s", symbol, exc)
+        if info is None:
+            return super().quote(symbol, history)
+        from app.market.tickers import resolve_ticker
+
+        resolved = resolve_ticker(symbol, allow_search=False)
+        name = resolved.name if resolved.method != "fallback" else (info.get("name") or symbol)
+        return build_quote(symbol, name, history, info, source=self.name)
+
+
 class OfflineProvider:
     """Deterministic synthetic GBM price paths seeded from the symbol."""
 
@@ -195,6 +206,8 @@ def build_quote(symbol: str, name: str, history: pd.DataFrame, info: dict, sourc
     else:
         as_of, last_date = str(last_ts), None
     today = now_ist().date()
+    if info.get("last_update"):
+        as_of = info["last_update"]
     stale = (not open_now) or (last_date is not None and last_date < today and info.get("last_price") is None)
 
     change = ltp - prev_close
@@ -239,7 +252,13 @@ class MarketDataEngine:
     @property
     def provider(self):
         if self._provider is None:
-            self._provider = OfflineProvider() if get_settings().offline_mode else YFinanceProvider()
+            settings = get_settings()
+            if settings.offline_mode:
+                self._provider = OfflineProvider()
+            elif settings.quote_source.lower() == "yfinance":
+                self._provider = YFinanceProvider()
+            else:
+                self._provider = NSELiveProvider()
         return self._provider
 
     def history(self, symbol: str, period: str = "1y") -> pd.DataFrame:

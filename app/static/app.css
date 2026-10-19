@@ -43,3 +43,17 @@ html.dark .card { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0
 .meter > span { display: block; height: 100%; border-radius: 9999px; }
 .range { position: relative; height: 6px; border-radius: 9999px; background: var(--line); }
 .range > i { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 9999px; background: var(--indigo); border: 2px solid var(--bg); }
+/* Type-ahead dropdown */
+.suggest {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 1rem; overflow: hidden;
+  box-shadow: 0 8px 24px rgba(30,34,45,0.12); max-height: 22rem; overflow-y: auto;
+}
+.suggest-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem; width: 100%;
+  padding: .625rem .875rem; text-align: left; font-size: .875rem; color: var(--ink-900); background: transparent;
+}
+.suggest-item:hover, .suggest-item.is-active { background: var(--bg-2); }
+.suggest-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-sym { color: var(--ink-500); font-size: .75rem; white-space: nowrap; }
+.suggest-sym small { color: var(--ink-500); opacity: .8; margin-left: .25rem; }

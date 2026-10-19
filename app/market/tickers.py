@@ -142,3 +142,49 @@ def _yahoo_search(query: str) -> ResolvedTicker | None:
                 method="search",
             )
     return None
+
+
+def suggest(query: str, limit: int = 8) -> list[dict]:
+    """Rank bundled symbols for type-ahead: symbol prefix > name/alias prefix > substring > fuzzy."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    nq = _norm(q)
+    uq = q.upper().replace(".NS", "").replace(".BO", "")
+    scored: dict[str, tuple[float, dict]] = {}
+
+    def consider(row: dict, score: float) -> None:
+        cur = scored.get(row["symbol"])
+        if cur is None or score > cur[0]:
+            scored[row["symbol"]] = (score, row)
+
+    for idx, row in enumerate(_load_symbols()):
+        sym = row["symbol"]
+        texts = [row["name"], *row.get("aliases", [])]
+        row = {**row, "_rank": idx}
+        if sym == uq:
+            consider(row, 100)
+        elif sym.startswith(uq):
+            consider(row, 90 - len(sym) * 0.1)
+        for t in texts:
+            nt = _norm(t)
+            if not nt:
+                continue
+            if nt == nq:
+                consider(row, 95)
+            elif nt.startswith(nq):
+                consider(row, 80 - len(nt) * 0.1)
+            elif any(w.startswith(nq) for w in nt.split()):
+                consider(row, 70)
+            elif nq in nt:
+                consider(row, 60)
+            elif len(nq) >= 4:
+                r = difflib.SequenceMatcher(None, nq, nt).ratio()
+                if r >= 0.6:
+                    consider(row, 40 * r)
+    # Tie-break by list order (roughly market-cap order), so TATAMOTORS beats TATACHEM for "tata".
+    ranked = sorted(scored.values(), key=lambda x: (-x[0], x[1]["_rank"]))[:limit]
+    return [
+        {"symbol": f"{row['symbol']}.NS", "base_symbol": row["symbol"], "name": row["name"], "exchange": "NSE"}
+        for _, row in ranked
+    ]

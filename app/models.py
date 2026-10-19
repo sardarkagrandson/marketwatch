@@ -84,3 +84,16 @@ class NewsAssessmentCache(Base):
     payload: Mapped[str] = mapped_column(Text)  # JSON NewsAssessment
     source: Mapped[str] = mapped_column(String(16), default="heuristic")  # llm | heuristic
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DeviceLicense(Base):
+    """The activated licence token for this installation (at most one row)."""
+
+    __tablename__ = "device_license"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(Text)
+    device_id: Mapped[str] = mapped_column(String(32))
+    licensee: Mapped[str] = mapped_column(String(128), default="")
+    expires: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

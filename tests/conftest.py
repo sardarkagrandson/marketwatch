@@ -6,7 +6,7 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="mw-test-"))
 os.environ["OFFLINE_MODE"] = "true"
 os.environ["DATA_DIR"] = str(_TMP)
-os.environ["MARKETWATCH_NO_SCHEDULER"] = "1"
+os.environ["SNITCH_NO_SCHEDULER"] = "1"
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["SMTP_HOST"] = ""
 os.environ["NEWS_CACHE_SECONDS"] = "1800"

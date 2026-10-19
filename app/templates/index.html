@@ -5,8 +5,8 @@
   <h1 class="text-2xl md:text-3xl font-semibold text-ink-900 dark:text-white">Indian market sentiment &amp; technical intelligence</h1>
   <p class="mt-2 text-ink-500 max-w-2xl">Resolve any NSE / BSE company, read a structured news-sentiment matrix, check technical setups and estimate the statistical odds of a price reaching your cutoff.</p>
   <form action="/stock" method="get" class="mt-6 flex flex-col sm:flex-row gap-3 max-w-2xl">
-    <input name="q" required placeholder="Company name or symbol, e.g. Reliance, TATAMOTORS.NS"
-           class="flex-1 h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-mint/40">
+    <div class="relative flex-1"><input name="q" required data-suggest data-submit="1" placeholder="Company name or symbol, e.g. Reliance, TATAMOTORS.NS"
+           class="w-full h-12 px-4 rounded-full bg-surface-1 dark:bg-surface-dark border border-surface-line dark:border-surface-darkline text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-mint/40"></div>
     <button class="btn-primary h-12 px-6">Analyse</button>
   </form>
   <div class="mt-5 flex flex-wrap gap-2">

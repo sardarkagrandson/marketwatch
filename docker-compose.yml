@@ -1,14 +1,15 @@
 # One-command setup:  docker compose up -d
 # Then open http://localhost:8000
 services:
-  marketwatch:
+  snitchofdalal:
     # Uses the prebuilt image when available; otherwise builds from this folder.
     image: ghcr.io/sardarkagrandson/marketwatch:latest
     build: .
-    container_name: marketwatch
+    container_name: snitchofdalal
     restart: unless-stopped
     ports:
-      - "${MARKETWATCH_PORT:-8000}:8000"
+      # Bound to this computer only by default. Set BIND_HOST=0.0.0.0 in .env to allow other devices on your network.
+      - "${BIND_HOST:-127.0.0.1}:${APP_PORT:-8000}:8000"
     env_file:
       - path: .env
         required: false
@@ -17,7 +18,7 @@ services:
       - TZ=Asia/Kolkata
     volumes:
       # Keeps your watchlist, portfolio, caches and saved alert emails across restarts/updates.
-      - marketwatch-data:/data
+      - snitchofdalal-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
       interval: 30s
@@ -26,4 +27,4 @@ services:
       retries: 3
 
 volumes:
-  marketwatch-data:
+  snitchofdalal-data:

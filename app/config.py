@@ -15,10 +15,15 @@ class Settings(BaseSettings):
         env_file=PROJECT_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    app_name: str = "MarketWatch"
+    app_name: str = "SnitchofDalal"
     data_dir: Path = Field(default=PROJECT_ROOT / "data")
     offline_mode: bool = False
     market_holidays: str = ""
+
+    # Device licensing: empty = open access. Set to the public key from tools/license_admin.py keygen.
+    license_public_key: str = ""
+    # Quote source: auto (NSE live, Yahoo fallback) | yfinance
+    quote_source: str = "auto"
 
     anthropic_api_key: str = ""
     sentiment_model: str = "claude-opus-5-5"
@@ -42,7 +47,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return f"sqlite:///{self.resolved_data_dir / 'marketwatch.db'}"
+        return f"sqlite:///{self.resolved_data_dir / 'snitchofdalal.db'}"
 
     @property
     def jobstore_url(self) -> str:

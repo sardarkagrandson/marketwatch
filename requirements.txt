@@ -14,6 +14,7 @@ feedparser>=6.0
 httpx>=0.27
 aiosmtplib>=3.0
 anthropic>=1.0
+cryptography>=42
 python-dotenv>=1.0
 pytest>=8.0
 # Optional: `ta` provides reference implementations of the same indicators.
