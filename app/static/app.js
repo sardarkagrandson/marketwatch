@@ -131,3 +131,19 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
   var initial = (location.hash || "").replace("#", "");
   show(document.getElementById("tab-" + initial) ? initial : btns[0].getAttribute("data-tab"));
 })();
+
+// ---- IPO page: reload once the background refresh finishes --------------------
+(function () {
+  var el = document.getElementById("ipo-loading");
+  if (!el) return;
+  var seen = el.getAttribute("data-updated") || "";
+  var tries = 0;
+  (function poll() {
+    if (tries++ > 120) return;  // ~6 minutes
+    fetch("/api/ipo/status").then(function (r) { return r.json(); }).then(function (s) {
+      if (!s.loading && (s.updated_at || "") !== seen) { location.reload(); return; }
+      if (!s.loading && s.error) { location.reload(); return; }
+      setTimeout(poll, 3000);
+    }).catch(function () { setTimeout(poll, 5000); });
+  })();
+})();

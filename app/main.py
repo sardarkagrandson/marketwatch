@@ -301,21 +301,25 @@ def portfolio_delete(holding_id: int, db: Session = Depends(get_db)):
 # ================================================================= IPO
 @app.get("/ipo", response_class=HTMLResponse)
 def ipo_page(request: Request):
-    from datetime import datetime as _dt
-
-    cards = ipo_service.upcoming_cards()
-    listed = ipo_service.recently_listed()
+    snap = ipo_service.ensure_snapshot()
+    updated = snap["updated_at"]
     return templates.TemplateResponse(
         request, "ipo.html",
-        ctx(request, cards=cards, listed=listed, fetched_label=_dt.now().strftime("%d %b %H:%M")),
+        ctx(request, cards=snap["cards"], listed=snap["listed"], loading=snap["loading"], load_error=snap["error"],
+            fetched_label=updated.astimezone().strftime("%d %b %H:%M") if updated else "never",
+            updated_iso=updated.isoformat() if updated else ""),
     )
 
 
 @app.post("/ipo/refresh")
 def ipo_refresh():
-    ipo_service.upcoming_cards(force=True)
-    ipo_service.recently_listed(force=True)
+    ipo_service.ensure_snapshot(force=True)
     return RedirectResponse("/ipo", status_code=303)
+
+
+@app.get("/api/ipo/status")
+def api_ipo_status():
+    return ipo_service.snapshot_status()
 
 
 @app.get("/api/ipo/upcoming")

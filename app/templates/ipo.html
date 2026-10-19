@@ -13,10 +13,19 @@
   </div>
 </section>
 
+{% if loading %}
+<div id="ipo-loading" class="card px-5 py-4 flex items-center gap-3 text-sm" data-updated="{{ updated_iso }}">
+  <span class="w-4 h-4 rounded-full border-2 border-mint border-t-transparent animate-spin"></span>
+  <span>Fetching the latest issues from NSE, grey-market data and news. This can take a minute or two the first time; the page updates by itself when done.{% if cards or listed %} Showing the previous snapshot meanwhile.{% endif %}</span>
+</div>
+{% elif load_error %}
+<div class="rounded-2xl px-4 py-3 text-sm bg-crimson-50 text-crimson-600 dark:bg-crimson/15">Last refresh failed: {{ load_error }}</div>
+{% endif %}
+
 <!-- ============ Tab 1 ============ -->
 <section id="tab-upcoming" class="tab-panel space-y-4">
   {% if not cards %}
-  <div class="card p-8 text-center text-sm text-ink-500">No upcoming or ongoing IPOs were found (or NSE was unreachable). Try <form method="post" action="/ipo/refresh" class="inline"><button class="underline">refresh</button></form>.</div>
+  {% if not loading %}<div class="card p-8 text-center text-sm text-ink-500">No upcoming or ongoing IPOs were found (or NSE was unreachable). Try <form method="post" action="/ipo/refresh" class="inline"><button class="underline">refresh</button></form>.</div>{% endif %}
   {% endif %}
   {% for c in cards %}{% set l = c.listing %}
   <article class="card p-5 md:p-6">

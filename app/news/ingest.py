@@ -34,10 +34,16 @@ def _norm_title(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+FEED_TIMEOUT = 12.0
+
+
 def _parse_feed(url: str) -> list[NewsArticle]:
     import feedparser
+    import httpx
 
-    feed = feedparser.parse(url, agent=USER_AGENT)
+    resp = httpx.get(url, timeout=FEED_TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT})
+    resp.raise_for_status()
+    feed = feedparser.parse(resp.content)
     out: list[NewsArticle] = []
     for entry in feed.entries:
         headline = (entry.get("title") or "").strip()

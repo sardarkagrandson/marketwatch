@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import date, datetime, timedelta, timezone
 
 from app.config import get_settings
@@ -20,6 +23,24 @@ LIST_TTL = timedelta(hours=1)
 ASSESS_TTL = timedelta(hours=12)
 NEWS_DAYS = 14
 RECENT_DAYS = 60
+NSE_TIMEOUT = 40.0        # seconds per NSE endpoint (nsemine retries internally)
+GMP_TIMEOUT = 20.0
+ITEM_TIMEOUT = 45.0       # per listing: news + assessment
+MAX_LISTED = 40
+
+_bg_pool = ThreadPoolExecutor(max_workers=12, thread_name_prefix="ipo")
+
+
+def _with_timeout(fn, timeout: float, default, label: str):
+    """Run fn in a worker and give up after `timeout` seconds (the worker is left to finish)."""
+    future = _bg_pool.submit(fn)
+    try:
+        return future.result(timeout=timeout)
+    except FutureTimeout:
+        log.warning("IPO: %s timed out after %.0fs", label, timeout)
+    except Exception as exc:
+        log.warning("IPO: %s failed: %s", label, exc)
+    return default
 
 
 # ---------------------------------------------------------------- cache helpers
@@ -54,9 +75,9 @@ def upcoming_listings(force: bool = False) -> list[IPOListing]:
         if cached is not None:
             rows = [IPOListing.model_validate(r) for r in cached]
         else:
-            rows = sources.fetch_nse_upcoming()
+            rows = _with_timeout(sources.fetch_nse_upcoming, NSE_TIMEOUT * 2, [], "NSE upcoming issues")
             if rows:
-                gmp = sources.fetch_gmp_table()
+                gmp = _with_timeout(sources.fetch_gmp_table, GMP_TIMEOUT, {}, "GMP page")
                 for r in rows:
                     hit = sources.match_gmp(r, gmp)
                     if hit is not None:
@@ -113,20 +134,33 @@ def _assessment_for(listing: IPOListing, headlines: list[str], news_score: float
     return result, method
 
 
+def _build_card(listing: IPOListing) -> IPOCard:
+    try:
+        news, score = _ipo_news(listing)
+    except Exception as exc:
+        log.warning("IPO news failed for %s: %s", listing.company, exc)
+        news, score = [], None
+    try:
+        assessment, method = _assessment_for(listing, [n["headline"] for n in news], score)
+    except Exception as exc:
+        log.warning("IPO assessment failed for %s: %s", listing.company, exc)
+        assessment, method = None, "none"
+    return IPOCard(listing=listing, assessment=assessment, assessment_method=method, news=news, news_score=score)
+
+
 def upcoming_cards(force: bool = False) -> list[IPOCard]:
-    cards: list[IPOCard] = []
-    for listing in upcoming_listings(force):
-        try:
-            news, score = _ipo_news(listing)
-        except Exception as exc:
-            log.warning("IPO news failed for %s: %s", listing.company, exc)
-            news, score = [], None
-        try:
-            assessment, method = _assessment_for(listing, [n["headline"] for n in news], score)
-        except Exception as exc:
-            log.warning("IPO assessment failed for %s: %s", listing.company, exc)
-            assessment, method = None, "none"
-        cards.append(IPOCard(listing=listing, assessment=assessment, assessment_method=method, news=news, news_score=score))
+    listings = upcoming_listings(force)
+    if get_settings().offline_mode:
+        return [_build_card(l) for l in listings]
+    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="ipo-card") as pool:
+        futures = [pool.submit(_build_card, l) for l in listings]
+        cards = []
+        for l, f in zip(listings, futures):
+            try:
+                cards.append(f.result(timeout=ITEM_TIMEOUT))
+            except Exception as exc:
+                log.warning("IPO card for %s gave up: %s", l.company, exc)
+                cards.append(IPOCard(listing=l, assessment=None, assessment_method="none"))
     return cards
 
 
@@ -168,8 +202,9 @@ def recently_listed(force: bool = False) -> list[ListedIPO]:
         if cached is not None:
             rows = [ListedIPO.model_validate(r) for r in cached]
         else:
-            rows = sources.fetch_nse_past(RECENT_DAYS)
-            _cache_set("ipo:past", [r.model_dump(mode="json") for r in rows])
+            rows = _with_timeout(lambda: sources.fetch_nse_past(RECENT_DAYS), NSE_TIMEOUT, [], "NSE past issues")
+            if rows:
+                _cache_set("ipo:past", [r.model_dump(mode="json") for r in rows])
     overrides = sources.load_overrides()
     for r in rows:
         o = overrides.get(r.key)
@@ -184,7 +219,12 @@ def recently_listed(force: bool = False) -> list[ListedIPO]:
             rows.append(ListedIPO(key=key, symbol=o.get("symbol", f"{key}.NS"), company=o.get("company", key),
                                   issue_price=o.get("issue_price"),
                                   listing_date=date.fromisoformat(o["listing_date"]) if o.get("listing_date") else None))
-    rows = [_performance(r) for r in rows]
+    rows = rows[:MAX_LISTED]
+    if settings.offline_mode:
+        rows = [_performance(r) for r in rows]
+    else:
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="ipo-perf") as pool:
+            rows = list(pool.map(_performance, rows))
     if settings.offline_mode:  # make the synthetic series tell a believable story
         for r, factor in zip(rows, (1.18, 0.93, 1.42)):
             if r.listing_open:
@@ -192,3 +232,52 @@ def recently_listed(force: bool = False) -> list[ListedIPO]:
                 r.listing_gain_pct = round((r.listing_close / r.issue_price - 1) * 100, 2)
                 r.total_gain_pct = round((r.ltp / r.issue_price - 1) * 100, 2)
     return sorted(rows, key=lambda r: r.listing_date or date.min, reverse=True)
+
+
+# ---------------------------------------------------------------- background snapshot for the page
+_snapshot: dict = {"cards": [], "listed": [], "updated_at": None, "loading": False, "error": None, "started_at": None}
+_snap_lock = threading.Lock()
+SNAPSHOT_TTL = 3600.0
+
+
+def _refresh_snapshot(force: bool) -> None:
+    t0 = time.monotonic()
+    try:
+        cards = upcoming_cards(force)
+        listed = recently_listed(force)
+        with _snap_lock:
+            _snapshot.update(cards=cards, listed=listed, updated_at=datetime.now(timezone.utc), error=None)
+        log.info("IPO snapshot refreshed in %.1fs (%d upcoming, %d listed)", time.monotonic() - t0, len(cards), len(listed))
+    except Exception as exc:
+        log.exception("IPO snapshot refresh failed")
+        with _snap_lock:
+            _snapshot["error"] = str(exc)[:200]
+    finally:
+        with _snap_lock:
+            _snapshot["loading"] = False
+
+
+def ensure_snapshot(force: bool = False) -> dict:
+    """Return the current snapshot immediately; start a background refresh if it is stale.
+    In offline mode the refresh runs inline (fast, deterministic)."""
+    with _snap_lock:
+        stale = force or _snapshot["updated_at"] is None or \
+            (datetime.now(timezone.utc) - _snapshot["updated_at"]).total_seconds() > SNAPSHOT_TTL
+        start = stale and not _snapshot["loading"]
+        if start:
+            _snapshot.update(loading=True, started_at=datetime.now(timezone.utc))
+    if start:
+        if get_settings().offline_mode:
+            _refresh_snapshot(force)
+        else:
+            threading.Thread(target=_refresh_snapshot, args=(force,), daemon=True, name="ipo-refresh").start()
+    with _snap_lock:
+        return dict(_snapshot)
+
+
+def snapshot_status() -> dict:
+    with _snap_lock:
+        s = _snapshot
+        return {"loading": s["loading"], "updated_at": s["updated_at"].isoformat() if s["updated_at"] else None,
+                "started_at": s["started_at"].isoformat() if s["started_at"] else None, "error": s["error"],
+                "upcoming": len(s["cards"]), "listed": len(s["listed"])}
