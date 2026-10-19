@@ -45,6 +45,32 @@ def test_parse_amfi_and_classify():
     assert classify("Open Ended Schemes(Equity Scheme - Sectoral/ Thematic)") == "sectoral"
 
 
+SAMPLE_2026 = """Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ 
+Open Ended Schemes(Children’s Fund - Childrens' Fund)
+ 
+Axis Mutual Fund
+ 
+120588;INF846K01EL8;-;Axis Children's Fund;Direct;Growth;31.4567;17-Oct-2026
+120589;INF846K01EM6;-;Axis Children's Fund;Regular;IDCW;24.1000;17-Oct-2026
+
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+HDFC Mutual Fund
+
+118989;INF179K01YV8;-;HDFC Large Cap Fund;Direct;Growth;1,245.6789;17-Oct-2026
+"""
+
+
+def test_parse_amfi_eight_column_layout():
+    rows = sources.parse_amfi(SAMPLE_2026)
+    assert len(rows) == 3
+    a, b, c = rows
+    assert a.kind == "solution" and a.direct and a.growth and a.nav == 31.4567 and a.nav_date == date(2026, 10, 17)
+    assert b.direct is False and b.growth is False and b.amc == "Axis Mutual Fund"
+    assert c.kind == "large_cap" and c.nav == 1245.6789 and c.direct and c.growth and c.amc == "HDFC Mutual Fund"
+
+
 def test_every_kind_has_guide_content():
     for k in KINDS:
         assert k.use_case and k.description and k.horizon and k.risk

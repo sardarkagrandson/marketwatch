@@ -12,8 +12,8 @@ from app.mf.taxonomy import classify
 log = logging.getLogger(__name__)
 
 AMFI_NAV_URLS = [
+    "https://portal.amfiindia.com/spages/NAVAll.txt",   # answered quickly in practice
     "https://www.amfiindia.com/spages/NAVAll.txt",
-    "https://portal.amfiindia.com/spages/NAVAll.txt",
 ]
 MFAPI_URL = "https://api.mfapi.in/mf/{code}"
 MFAPI_LIST_URL = "https://api.mfapi.in/mf"
@@ -57,10 +57,15 @@ def _date(s: str) -> date | None:
 
 
 def parse_amfi(text: str) -> list[Scheme]:
-    """Parse NAVAll.txt. Section headers name the category; AMC lines have no ';'; scheme rows have 6 fields."""
+    """Parse NAVAll.txt. The header row names the columns (AMFI added Plan and Option columns in 2026,
+    so both the 6-column and 8-column layouts are handled). Section headers name the category and
+    AMC lines have no ';'."""
     schemes: list[Scheme] = []
     category = ""
     amc = ""
+    cols = {"code": 0, "isin": 1, "name": 3, "nav": 4, "date": 5}   # classic 6-column layout
+    plan_col: int | None = None
+    option_col: int | None = None
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -72,17 +77,41 @@ def parse_amfi(text: str) -> list[Scheme]:
                 amc = line
             continue
         parts = [p.strip() for p in line.split(";")]
-        if len(parts) < 6 or not parts[0].isdigit():
-            continue  # header row or malformed
-        code, isin1, _isin2, name, nav_s, date_s = parts[:6]
+        if parts and parts[0].lower().startswith("scheme code"):
+            lowered = [p.lower() for p in parts]
+            def find(*names):
+                for i, h in enumerate(lowered):
+                    if any(n in h for n in names):
+                        return i
+                return None
+            cols = {
+                "code": 0,
+                "isin": find("isin div payout", "isin growth") or 1,
+                "name": find("scheme name") or 3,
+                "nav": find("net asset value", "nav") or 4,
+                "date": find("date") or 5,
+            }
+            plan_col, option_col = find("plan"), find("option")
+            continue
+        if len(parts) <= max(cols.values()) or not parts[0].isdigit():
+            continue  # malformed
+        code = parts[cols["code"]]
+        name = re.sub(r"\s+", " ", parts[cols["name"]])
+        nav_s, date_s = parts[cols["nav"]], parts[cols["date"]]
         try:
-            nav = float(nav_s) if nav_s not in ("", "N.A.", "-") else None
+            nav = float(nav_s.replace(",", "")) if nav_s not in ("", "N.A.", "-") else None
         except ValueError:
             nav = None
         direct, growth = _plan_flags(name)
+        if plan_col is not None and plan_col < len(parts) and parts[plan_col]:
+            direct = parts[plan_col].strip().lower().startswith("direct")
+        if option_col is not None and option_col < len(parts) and parts[option_col]:
+            opt = parts[option_col].strip().lower()
+            growth = opt.startswith("growth") or opt.startswith("cumulative")
         schemes.append(Scheme(
-            code=code, name=re.sub(r"\s+", " ", name), amc=amc, amfi_category=category, kind=classify(category, name),
-            nav=nav, nav_date=_date(date_s), isin=isin1 or None, direct=direct, growth=growth,
+            code=code, name=name, amc=amc, amfi_category=category, kind=classify(category, name),
+            nav=nav, nav_date=_date(date_s), isin=(parts[cols["isin"]] or None) if cols["isin"] < len(parts) else None,
+            direct=direct, growth=growth,
         ))
     return schemes
 
